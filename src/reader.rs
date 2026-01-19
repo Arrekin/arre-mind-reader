@@ -40,9 +40,15 @@ pub struct RightTextMarker;
 #[derive(Component)]
 pub struct ReticleMarker;
 
+// Approximate character width ratio for monospace fonts
+const CHAR_WIDTH_RATIO: f32 = 0.6;
+
 fn setup_orp_display(mut commands: Commands) {
     let reticle_color = Color::srgba(1.0, 0.0, 0.0, 0.5);
     let reticle_size = Vec2::new(3.0, 40.0);
+    let font_size = 48.0;
+    // Half character width for positioning adjacent to center
+    let half_char = font_size * CHAR_WIDTH_RATIO * 0.5;
     
     // Top reticle
     commands.spawn((
@@ -56,23 +62,25 @@ fn setup_orp_display(mut commands: Commands) {
         Transform::from_xyz(0.0, -40.0, 0.0),
         ReticleMarker,
     ));
-    // Left text
+    
+    // Left text - right edge touches left edge of center char
     commands.spawn((
         Text2d::new(""),
         TextFont {
-            font_size: 48.0,
+            font_size,
             ..default()
         },
         TextColor(Color::WHITE),
         Anchor::CENTER_RIGHT,
-        Transform::from_xyz(-4.0, 0.0, 0.0),
+        Transform::from_xyz(-half_char, 0.0, 0.0),
         LeftTextMarker,
     ));
-    // Center text (ORP letter - highlighted)
+    
+    // Center text (ORP letter) - fixed at x=0, aligned with reticles
     commands.spawn((
         Text2d::new(""),
         TextFont {
-            font_size: 48.0,
+            font_size,
             ..default()
         },
         TextColor(Color::srgb(1.0, 0.0, 0.0)),
@@ -80,16 +88,17 @@ fn setup_orp_display(mut commands: Commands) {
         Transform::from_xyz(0.0, 0.0, 0.0),
         CenterTextMarker,
     ));
-    // Right text
+    
+    // Right text - left edge touches right edge of center char
     commands.spawn((
         Text2d::new(""),
         TextFont {
-            font_size: 48.0,
+            font_size,
             ..default()
         },
         TextColor(Color::WHITE),
         Anchor::CENTER_LEFT,
-        Transform::from_xyz(4.0, 0.0, 0.0),
+        Transform::from_xyz(half_char, 0.0, 0.0),
         RightTextMarker,
     ));
 }
