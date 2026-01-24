@@ -1,8 +1,9 @@
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
+use crate::fonts::AvailableFonts;
 use crate::reader::parse_text;
-use crate::state::{AvailableFonts, ReaderSettings, ReaderState, ReadingState, Tab, TabManager};
+use crate::state::{ReaderSettings, ReaderState, ReadingState, Tab, TabManager};
 
 #[derive(Resource, Default)]
 pub struct NewTabDialog {

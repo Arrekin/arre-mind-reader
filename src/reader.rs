@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use bevy::sprite::Anchor;
 use std::time::Duration;
 
-use crate::state::{AvailableFonts, ReaderSettings, ReaderState, ReadingState, Word};
+use crate::state::{ReaderSettings, ReaderState, ReadingState, Word};
 
 pub struct ReaderPlugin;
 
@@ -11,9 +11,8 @@ impl Plugin for ReaderPlugin {
         app.init_state::<ReadingState>()
             .init_resource::<ReaderState>()
             .init_resource::<ReaderSettings>()
-            .init_resource::<AvailableFonts>()
             .init_resource::<ReadingTimer>()
-            .add_systems(Startup, (setup_orp_display, scan_fonts))
+            .add_systems(Startup, (setup_orp_display))
             .add_systems(Update, (
                 handle_input,
                 tick_reader.run_if(in_state(ReadingState::Active)),
@@ -109,22 +108,6 @@ fn setup_orp_display(
         Transform::from_xyz(half_char, 0.0, 0.0),
         RightTextMarker,
     ));
-}
-
-fn scan_fonts(mut available: ResMut<AvailableFonts>) {
-    let fonts_dir = std::path::Path::new("assets/fonts");
-    if let Ok(entries) = std::fs::read_dir(fonts_dir) {
-        available.fonts.clear();
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.extension().is_some_and(|e| e == "ttf" || e == "otf") {
-                if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                    available.fonts.push(format!("fonts/{}", name));
-                }
-            }
-        }
-        available.fonts.sort();
-    }
 }
 
 pub fn parse_text(text: &str) -> Vec<Word> {

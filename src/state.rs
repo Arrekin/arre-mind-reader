@@ -21,24 +21,6 @@ pub struct ReaderState {
     pub words: Vec<Word>,
 }
 
-#[derive(Resource, Default)]
-pub struct FocusModeState {
-    pub ui_opacity: f32,
-    pub mouse_idle_timer: f32,
-}
-
-#[derive(Resource)]
-pub struct AvailableFonts {
-    pub fonts: Vec<String>,
-}
-
-impl Default for AvailableFonts {
-    fn default() -> Self {
-        Self {
-            fonts: vec!["fonts/JetBrainsMono-Regular.ttf".to_string()],
-        }
-    }
-}
 
 #[derive(Resource, Serialize, Deserialize, Clone)]
 pub struct ReaderSettings {

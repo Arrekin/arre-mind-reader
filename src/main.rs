@@ -1,14 +1,11 @@
 use bevy::prelude::*;
 use bevy_egui::EguiPlugin;
 
+mod fonts;
 mod reader;
 mod settings;
 mod state;
 mod ui;
-
-use reader::ReaderPlugin;
-use settings::SettingsPlugin;
-use ui::UiPlugin;
 
 fn main() {
     App::new()
@@ -21,7 +18,12 @@ fn main() {
             ..default()
         }))
         .add_plugins(EguiPlugin::default())
-        .add_plugins((ReaderPlugin, SettingsPlugin, UiPlugin))
+        .add_plugins((
+            fonts::FontsPlugin, 
+            reader::ReaderPlugin, 
+            settings::SettingsPlugin, 
+            ui::UiPlugin
+        ))
         .add_systems(Startup, setup)
         .run();
 }
