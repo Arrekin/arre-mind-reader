@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
 use crate::reader::parse_text;
-use crate::state::{ReaderSettings, ReaderState, ReadingState, Tab, TabManager};
+use crate::state::{AvailableFonts, ReaderSettings, ReaderState, ReadingState, Tab, TabManager};
 
 #[derive(Resource, Default)]
 pub struct NewTabDialog {
@@ -90,6 +90,7 @@ fn controls_system(
     current_state: Res<State<ReadingState>>,
     mut next_state: ResMut<NextState<ReadingState>>,
     tabs: Res<TabManager>,
+    fonts: Res<AvailableFonts>,
     mut initialized: Local<bool>,
 ) {
     if !*initialized {
@@ -133,6 +134,22 @@ fn controls_system(
             if ui.add(egui::Slider::new(&mut wpm, 100..=1000).step_by(50.0)).changed() {
                 settings.wpm = wpm as u32;
             }
+            
+            ui.separator();
+            
+            // Font selector
+            ui.label("Font:");
+            let current_font = settings.font_path.split('/').last().unwrap_or(&settings.font_path);
+            egui::ComboBox::from_id_salt("font_selector")
+                .selected_text(current_font)
+                .show_ui(ui, |ui| {
+                    for font_path in &fonts.fonts {
+                        let display_name = font_path.split('/').last().unwrap_or(font_path);
+                        if ui.selectable_label(settings.font_path == *font_path, display_name).clicked() {
+                            settings.font_path = font_path.clone();
+                        }
+                    }
+                });
             
             ui.separator();
             

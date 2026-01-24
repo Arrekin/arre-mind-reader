@@ -21,11 +21,31 @@ pub struct ReaderState {
     pub words: Vec<Word>,
 }
 
+#[derive(Resource, Default)]
+pub struct FocusModeState {
+    pub ui_opacity: f32,
+    pub mouse_idle_timer: f32,
+}
+
+#[derive(Resource)]
+pub struct AvailableFonts {
+    pub fonts: Vec<String>,
+}
+
+impl Default for AvailableFonts {
+    fn default() -> Self {
+        Self {
+            fonts: vec!["fonts/JetBrainsMono-Regular.ttf".to_string()],
+        }
+    }
+}
+
 #[derive(Resource, Serialize, Deserialize, Clone)]
 pub struct ReaderSettings {
     pub wpm: u32,
     pub font_size: f32,
     pub highlight_color: [f32; 3],
+    pub font_path: String,
 }
 
 impl Default for ReaderSettings {
@@ -34,6 +54,7 @@ impl Default for ReaderSettings {
             wpm: 300,
             font_size: 48.0,
             highlight_color: [1.0, 0.0, 0.0],
+            font_path: "fonts/JetBrainsMono-Regular.ttf".to_string(),
         }
     }
 }
@@ -88,10 +109,4 @@ pub struct Tab {
     pub file_path: Option<std::path::PathBuf>,
     pub words: Vec<Word>,
     pub current_index: usize,
-}
-
-#[derive(Resource, Default)]
-pub struct FocusModeState {
-    pub ui_opacity: f32,
-    pub mouse_idle_timer: f32,
 }

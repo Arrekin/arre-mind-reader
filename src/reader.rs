@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use bevy::sprite::Anchor;
 use std::time::Duration;
 
-use crate::state::{FocusModeState, ReaderSettings, ReaderState, ReadingState, Word};
+use crate::state::{AvailableFonts, ReaderSettings, ReaderState, ReadingState, Word};
 
 pub struct ReaderPlugin;
 
@@ -11,9 +11,9 @@ impl Plugin for ReaderPlugin {
         app.init_state::<ReadingState>()
             .init_resource::<ReaderState>()
             .init_resource::<ReaderSettings>()
-            .init_resource::<FocusModeState>()
+            .init_resource::<AvailableFonts>()
             .init_resource::<ReadingTimer>()
-            .add_systems(Startup, setup_orp_display)
+            .add_systems(Startup, (setup_orp_display, scan_fonts))
             .add_systems(Update, (
                 handle_input,
                 tick_reader.run_if(in_state(ReadingState::Active)),
@@ -43,10 +43,15 @@ pub struct ReticleMarker;
 // Approximate character width ratio for monospace fonts
 const CHAR_WIDTH_RATIO: f32 = 0.6;
 
-fn setup_orp_display(mut commands: Commands) {
+fn setup_orp_display(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    settings: Res<ReaderSettings>,
+) {
     let reticle_color = Color::srgba(1.0, 0.0, 0.0, 0.5);
     let reticle_size = Vec2::new(3.0, 40.0);
-    let font_size = 48.0;
+    let font_size = settings.font_size;
+    let font: Handle<Font> = asset_server.load(&settings.font_path);
     // Half character width for positioning adjacent to center
     let half_char = font_size * CHAR_WIDTH_RATIO * 0.5;
     
@@ -67,6 +72,7 @@ fn setup_orp_display(mut commands: Commands) {
     commands.spawn((
         Text2d::new(""),
         TextFont {
+            font: font.clone(),
             font_size,
             ..default()
         },
@@ -80,6 +86,7 @@ fn setup_orp_display(mut commands: Commands) {
     commands.spawn((
         Text2d::new(""),
         TextFont {
+            font: font.clone(),
             font_size,
             ..default()
         },
@@ -93,6 +100,7 @@ fn setup_orp_display(mut commands: Commands) {
     commands.spawn((
         Text2d::new(""),
         TextFont {
+            font,
             font_size,
             ..default()
         },
@@ -101,6 +109,22 @@ fn setup_orp_display(mut commands: Commands) {
         Transform::from_xyz(half_char, 0.0, 0.0),
         RightTextMarker,
     ));
+}
+
+fn scan_fonts(mut available: ResMut<AvailableFonts>) {
+    let fonts_dir = std::path::Path::new("assets/fonts");
+    if let Ok(entries) = std::fs::read_dir(fonts_dir) {
+        available.fonts.clear();
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().is_some_and(|e| e == "ttf" || e == "otf") {
+                if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                    available.fonts.push(format!("fonts/{}", name));
+                }
+            }
+        }
+        available.fonts.sort();
+    }
 }
 
 pub fn parse_text(text: &str) -> Vec<Word> {
@@ -235,6 +259,7 @@ fn tick_reader(
 fn update_word_display(
     reader_state: Res<ReaderState>,
     settings: Res<ReaderSettings>,
+    asset_server: Res<AssetServer>,
     mut left_q: Query<(&mut Text2d, &mut TextFont), (With<LeftTextMarker>, Without<CenterTextMarker>, Without<RightTextMarker>)>,
     mut center_q: Query<(&mut Text2d, &mut TextFont, &mut TextColor), (With<CenterTextMarker>, Without<LeftTextMarker>, Without<RightTextMarker>)>,
     mut right_q: Query<(&mut Text2d, &mut TextFont), (With<RightTextMarker>, Without<LeftTextMarker>, Without<CenterTextMarker>)>,
@@ -251,19 +276,24 @@ fn update_word_display(
     let center: String = chars.get(orp_index).map(|c| c.to_string()).unwrap_or_default();
     let right: String = chars.get(orp_index + 1..).map(|s| s.iter().collect()).unwrap_or_default();
     
+    let font_handle: Handle<Font> = asset_server.load(&settings.font_path);
+    
     if let Ok((mut text, mut font)) = left_q.single_mut() {
         **text = left;
         font.font_size = settings.font_size;
+        font.font = font_handle.clone();
     }
     
     if let Ok((mut text, mut font, mut color)) = center_q.single_mut() {
         **text = center;
         font.font_size = settings.font_size;
+        font.font = font_handle.clone();
         *color = TextColor(settings.highlight_bevy_color());
     }
     
     if let Ok((mut text, mut font)) = right_q.single_mut() {
         **text = right;
         font.font_size = settings.font_size;
+        font.font = font_handle;
     }
 }
