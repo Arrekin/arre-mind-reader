@@ -5,15 +5,14 @@
 use bevy::prelude::*;
 
 use crate::state::constants::*;
-use crate::state::{ReaderSettings, ReaderState, ReadingState, TabManager};
+use crate::state::{ActiveTab, ReadingState, TabWpm, WordsManager};
 
 pub fn handle_input(
     keyboard: Res<ButtonInput<KeyCode>>,
     current_state: Res<State<ReadingState>>,
     mut next_state: ResMut<NextState<ReadingState>>,
-    mut reader_state: ResMut<ReaderState>,
-    mut settings: ResMut<ReaderSettings>,
-    tabs: Res<TabManager>,
+    active_tab: Res<ActiveTab>,
+    mut tabs_q: Query<(&mut TabWpm, &mut WordsManager)>,
 ) {
     // Space: toggle play/pause
     if keyboard.just_pressed(KeyCode::Space) {
@@ -32,25 +31,28 @@ pub fn handle_input(
         next_state.set(ReadingState::Idle);
     }
     
+    let Some(entity) = active_tab.entity else { return };
+    let Ok((mut tab_wpm, mut words_mgr)) = tabs_q.get_mut(entity) else { return };
+    
     // R: restart
     if keyboard.just_pressed(KeyCode::KeyR) {
-        reader_state.current_index = 0;
+        words_mgr.current_index = 0;
     }
     
-    let word_count = tabs.active_tab().map(|t| t.words.len()).unwrap_or(0);
+    let word_count = words_mgr.words.len();
     
     // Arrow keys: navigation and WPM
     if keyboard.just_pressed(KeyCode::ArrowLeft) {
-        reader_state.current_index = reader_state.current_index.saturating_sub(WORD_SKIP_AMOUNT);
+        words_mgr.current_index = words_mgr.current_index.saturating_sub(WORD_SKIP_AMOUNT);
     }
     if keyboard.just_pressed(KeyCode::ArrowRight) {
-        reader_state.current_index = (reader_state.current_index + WORD_SKIP_AMOUNT)
+        words_mgr.current_index = (words_mgr.current_index + WORD_SKIP_AMOUNT)
             .min(word_count.saturating_sub(1));
     }
     if keyboard.just_pressed(KeyCode::ArrowUp) {
-        settings.wpm = (settings.wpm + WPM_STEP).min(WPM_MAX);
+        tab_wpm.0 = (tab_wpm.0 + WPM_STEP).min(WPM_MAX);
     }
     if keyboard.just_pressed(KeyCode::ArrowDown) {
-        settings.wpm = settings.wpm.saturating_sub(WPM_STEP).max(WPM_MIN);
+        tab_wpm.0 = tab_wpm.0.saturating_sub(WPM_STEP).max(WPM_MIN);
     }
 }

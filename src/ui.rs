@@ -8,10 +8,12 @@ use bevy::tasks::{block_on, poll_once, AsyncComputeTaskPool, Task};
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 use std::path::PathBuf;
 
-use crate::fonts::AvailableFonts;
+use crate::fonts::FontsStore;
 use crate::text_parser::parse_text;
-use crate::state::constants::{WPM_MAX, WPM_MIN, WPM_STEP};
-use crate::state::{ReaderSettings, ReaderState, ReadingState, TabId, TabManager, Word};
+use crate::state::constants::*;
+use crate::state::{
+    ActiveTab, ReadingState, TabFilePath, TabFontSettings, TabId, TabMarker, TabName, TabWpm, Word, WordsManager,
+};
 
 #[derive(Resource, Default)]
 pub struct NewTabDialog {
@@ -36,31 +38,32 @@ impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<NewTabDialog>()
             .init_resource::<PendingFileLoad>()
-            .add_systems(Update, (sync_tab_to_reader, poll_file_load_task))
+            .add_systems(Update, poll_file_load_task)
             .add_systems(EguiPrimaryContextPass, (tab_bar_system, controls_system, new_tab_dialog_system));
     }
 }
 
 fn tab_bar_system(
+    mut commands: Commands,
     mut contexts: EguiContexts,
-    mut tabs: ResMut<TabManager>,
+    mut active_tab: ResMut<ActiveTab>,
     mut dialog: ResMut<NewTabDialog>,
     mut next_state: ResMut<NextState<ReadingState>>,
+    tabs_q: Query<(Entity, &TabMarker, &TabName)>,
 ) {
     let Ok(ctx) = contexts.ctx_mut() else { return };
     
-    let mut tab_to_close: Option<TabId> = None;
-    let mut tab_to_select: Option<TabId> = None;
+    let mut tab_to_close: Option<Entity> = None;
+    let mut tab_to_select: Option<Entity> = None;
     let mut open_dialog = false;
     
-    let active_id = tabs.active_id();
-    let tab_info: Vec<(TabId, String, bool)> = tabs.tabs().iter()
-        .map(|tab| (tab.id, tab.name.clone(), active_id == Some(tab.id)))
+    let tab_info: Vec<(Entity, TabId, String, bool)> = tabs_q.iter()
+        .map(|(e, marker, name)| (e, marker.id, name.0.clone(), active_tab.entity == Some(e)))
         .collect();
     
     egui::TopBottomPanel::top("tabs").show(ctx, |ui| {
         ui.horizontal(|ui| {
-            for (id, name, is_active) in &tab_info {
+            for (entity, _id, name, is_active) in &tab_info {
                 let label = if *is_active {
                     egui::RichText::new(name).strong()
                 } else {
@@ -69,10 +72,10 @@ fn tab_bar_system(
                 
                 ui.horizontal(|ui| {
                     if ui.selectable_label(*is_active, label).clicked() {
-                        tab_to_select = Some(*id);
+                        tab_to_select = Some(*entity);
                     }
                     if ui.small_button("×").clicked() {
-                        tab_to_close = Some(*id);
+                        tab_to_close = Some(*entity);
                     }
                 });
                 ui.separator();
@@ -85,12 +88,19 @@ fn tab_bar_system(
     });
     
     // Apply mutations after UI
-    if let Some(id) = tab_to_select {
-        tabs.set_active(id);
+    if let Some(entity) = tab_to_select {
+        active_tab.entity = Some(entity);
         next_state.set(ReadingState::Idle);
     }
-    if let Some(id) = tab_to_close {
-        tabs.close_tab(id);
+    if let Some(entity) = tab_to_close {
+        commands.entity(entity).despawn();
+        if active_tab.entity == Some(entity) {
+            // Select another tab or none
+            active_tab.entity = tab_info.iter()
+                .filter(|(e, _, _, _)| *e != entity)
+                .map(|(e, _, _, _)| *e)
+                .next();
+        }
         next_state.set(ReadingState::Idle);
     }
     if open_dialog {
@@ -101,68 +111,67 @@ fn tab_bar_system(
 
 fn controls_system(
     mut contexts: EguiContexts,
-    reader_state: Res<ReaderState>,
-    mut settings: ResMut<ReaderSettings>,
+    active_tab: Res<ActiveTab>,
     current_state: Res<State<ReadingState>>,
     mut next_state: ResMut<NextState<ReadingState>>,
-    tabs: Res<TabManager>,
-    fonts: Res<AvailableFonts>,
+    fonts: Res<FontsStore>,
+    mut tabs_q: Query<(&mut TabWpm, &mut TabFontSettings, &WordsManager)>,
 ) {
     let Ok(ctx) = contexts.ctx_mut() else { return };
     
     egui::TopBottomPanel::bottom("controls").show(ctx, |ui| {
         ui.horizontal(|ui| {
-            // Play/Pause button (only if we have a tab)
-            if let Some(tab) = tabs.active_tab() {
-                let btn_text = match current_state.get() {
-                    ReadingState::Active => "⏸ Pause",
-                    _ => "▶ Play",
-                };
-                if ui.button(btn_text).clicked() {
-                    match current_state.get() {
-                        ReadingState::Active => next_state.set(ReadingState::Paused),
-                        _ => next_state.set(ReadingState::Active),
+            if let Some(entity) = active_tab.entity {
+                if let Ok((mut tab_wpm, mut font_settings, words_mgr)) = tabs_q.get_mut(entity) {
+                    let btn_text = match current_state.get() {
+                        ReadingState::Active => "⏸ Pause",
+                        _ => "▶ Play",
+                    };
+                    if ui.button(btn_text).clicked() {
+                        match current_state.get() {
+                            ReadingState::Active => next_state.set(ReadingState::Paused),
+                            _ => next_state.set(ReadingState::Active),
+                        }
                     }
+                    
+                    // Progress
+                    let total = words_mgr.words.len();
+                    let current = words_mgr.current_index + 1;
+                    ui.label(format!("{}/{}", current, total));
+                    
+                    // Progress bar
+                    let progress = if total > 0 { current as f32 / total as f32 } else { 0.0 };
+                    ui.add(egui::ProgressBar::new(progress).desired_width(200.0));
+                    
+                    ui.separator();
+                    
+                    // WPM slider (per-tab)
+                    ui.label("WPM:");
+                    let mut wpm = tab_wpm.0;
+                    if ui.add(egui::Slider::new(&mut wpm, WPM_MIN..=WPM_MAX).step_by(WPM_STEP as f64)).changed() {
+                        tab_wpm.0 = wpm;
+                    }
+                    
+                    ui.separator();
+                    
+                    // Font selector (per-tab)
+                    ui.label("Font:");
+                    egui::ComboBox::from_id_salt("font_selector")
+                        .selected_text(&font_settings.font_name)
+                        .show_ui(ui, |ui| {
+                            for font_data in &fonts.fonts {
+                                if ui.selectable_label(font_settings.font_name == font_data.name, &font_data.name).clicked() {
+                                    font_settings.font_name = font_data.name.clone();
+                                    font_settings.font_handle = font_data.handle.clone();
+                                }
+                            }
+                        });
+                    
+                    ui.separator();
                 }
-                
-                // Progress
-                let total = tab.words.len();
-                let current = reader_state.current_index + 1;
-                ui.label(format!("{}/{}", current, total));
-                
-                // Progress bar
-                let progress = if total > 0 { current as f32 / total as f32 } else { 0.0 };
-                ui.add(egui::ProgressBar::new(progress).desired_width(200.0));
-                
-                ui.separator();
             } else {
                 ui.label("No tab open. Click '+ New' to add text.");
             }
-            
-            // WPM slider
-            ui.label("WPM:");
-            let mut wpm = settings.wpm;
-            if ui.add(egui::Slider::new(&mut wpm, WPM_MIN..=WPM_MAX).step_by(WPM_STEP as f64)).changed() {
-                settings.wpm = wpm;
-            }
-            
-            ui.separator();
-            
-            // Font selector
-            ui.label("Font:");
-            let current_font = settings.font_path.split('/').last().unwrap_or(&settings.font_path);
-            egui::ComboBox::from_id_salt("font_selector")
-                .selected_text(current_font)
-                .show_ui(ui, |ui| {
-                    for font_path in &fonts.fonts {
-                        let display_name = font_path.split('/').last().unwrap_or(font_path);
-                        if ui.selectable_label(settings.font_path == *font_path, display_name).clicked() {
-                            settings.font_path = font_path.clone();
-                        }
-                    }
-                });
-            
-            ui.separator();
             
             // State indicator
             let state_text = match current_state.get() {
@@ -176,11 +185,14 @@ fn controls_system(
 }
 
 fn new_tab_dialog_system(
+    mut commands: Commands,
     mut contexts: EguiContexts,
     mut dialog: ResMut<NewTabDialog>,
-    mut tabs: ResMut<TabManager>,
+    mut active_tab: ResMut<ActiveTab>,
     mut next_state: ResMut<NextState<ReadingState>>,
     mut pending_load: ResMut<PendingFileLoad>,
+    fonts: Res<FontsStore>,
+    tabs_q: Query<&TabMarker>,
 ) {
     if !dialog.open {
         return;
@@ -242,8 +254,10 @@ fn new_tab_dialog_system(
                 let can_create = !dialog.text_input.trim().is_empty() && !is_loading;
                 if ui.add_enabled(can_create, egui::Button::new("Create Tab")).clicked() {
                     let words = parse_text(&dialog.text_input);
-                    let name = format!("Text {}", tabs.tabs().len() + 1);
-                    tabs.add_tab(name, None, words);
+                    let tab_count = tabs_q.iter().count();
+                    let name = format!("Text {}", tab_count + 1);
+                    let entity = spawn_tab(&mut commands, &mut active_tab, &fonts, name, None, words);
+                    active_tab.entity = Some(entity);
                     dialog.open = false;
                     dialog.text_input.clear();
                     next_state.set(ReadingState::Idle);
@@ -258,16 +272,26 @@ fn new_tab_dialog_system(
 }
 
 fn poll_file_load_task(
+    mut commands: Commands,
     mut pending_load: ResMut<PendingFileLoad>,
-    mut tabs: ResMut<TabManager>,
+    mut active_tab: ResMut<ActiveTab>,
     mut dialog: ResMut<NewTabDialog>,
     mut next_state: ResMut<NextState<ReadingState>>,
+    fonts: Res<FontsStore>,
 ) {
     let Some(task) = &mut pending_load.task else { return };
     
     if let Some(result) = block_on(poll_once(task)) {
         if let Some(file_result) = result {
-            tabs.add_tab(file_result.name, Some(file_result.path), file_result.words);
+            let entity = spawn_tab(
+                &mut commands,
+                &mut active_tab,
+                &fonts,
+                file_result.name,
+                Some(file_result.path),
+                file_result.words,
+            );
+            active_tab.entity = Some(entity);
             dialog.open = false;
             next_state.set(ReadingState::Idle);
         }
@@ -275,28 +299,37 @@ fn poll_file_load_task(
     }
 }
 
-fn sync_tab_to_reader(
-    mut tabs: ResMut<TabManager>,
-    mut reader_state: ResMut<ReaderState>,
-    current_state: Res<State<ReadingState>>,
-) {
-    let tab_changed = tabs.active_id() != tabs.last_synced_id();
+pub fn spawn_tab(
+    commands: &mut Commands,
+    active_tab: &mut ActiveTab,
+    fonts: &FontsStore,
+    name: String,
+    file_path: Option<PathBuf>,
+    words: Vec<Word>,
+) -> Entity {
+    let id = active_tab.allocate_id();
+    let default_font = fonts.default_font();
+    let font_name = default_font.map(|f| f.name.clone()).unwrap_or_default();
+    let font_handle = default_font.map(|f| f.handle.clone()).unwrap_or_default();
     
-    // Sync current_index from reader back to tab when reading (only if tab hasn't changed)
-    if !tab_changed && *current_state.get() != ReadingState::Idle {
-        if let Some(tab) = tabs.active_tab_mut() {
-            tab.current_index = reader_state.current_index;
-        }
+    let mut entity_commands = commands.spawn((
+        TabMarker { id },
+        TabName(name),
+        TabFontSettings {
+            font_name,
+            font_handle,
+            font_size: FONT_SIZE_DEFAULT,
+        },
+        TabWpm(WPM_DEFAULT),
+        WordsManager {
+            words,
+            current_index: 0,
+        },
+    ));
+    
+    if let Some(path) = file_path {
+        entity_commands.insert(TabFilePath(path));
     }
     
-    // Sync current_index from tab to reader when tab changes
-    if tab_changed {
-        let active_id = tabs.active_id();
-        tabs.set_last_synced(active_id);
-        if let Some(tab) = tabs.active_tab() {
-            reader_state.current_index = tab.current_index;
-        } else {
-            reader_state.current_index = 0;
-        }
-    }
+    entity_commands.id()
 }

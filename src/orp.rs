@@ -6,9 +6,9 @@
 use bevy::prelude::*;
 use bevy::sprite::Anchor;
 
-use crate::fonts::FontCache;
+use crate::fonts::FontsStore;
 use crate::state::constants::*;
-use crate::state::{ReaderSettings, ReaderState, TabManager};
+use crate::state::{ActiveTab, TabFontSettings, WordsManager};
 
 #[derive(Component)]
 pub struct LeftTextMarker;
@@ -24,13 +24,12 @@ pub struct ReticleMarker;
 
 pub fn setup_orp_display(
     mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    settings: Res<ReaderSettings>,
+    fonts: Res<FontsStore>,
 ) {
-    let reticle_color = Color::srgba(1.0, 0.0, 0.0, RETICLE_ALPHA);
+    let reticle_color = Color::srgba(HIGHLIGHT_COLOR.0, HIGHLIGHT_COLOR.1, HIGHLIGHT_COLOR.2, RETICLE_ALPHA);
     let reticle_size = Vec2::new(RETICLE_WIDTH, RETICLE_HEIGHT);
-    let font_size = settings.font_size;
-    let font: Handle<Font> = asset_server.load(&settings.font_path);
+    let font_size = FONT_SIZE_DEFAULT;
+    let font = fonts.default_font().map(|f| f.handle.clone()).unwrap_or_default();
     let half_char = font_size * CHAR_WIDTH_RATIO * 0.5;
     
     // Top reticle
@@ -68,7 +67,7 @@ pub fn setup_orp_display(
             font_size,
             ..default()
         },
-        TextColor(Color::srgb(1.0, 0.0, 0.0)),
+        TextColor(Color::srgb(HIGHLIGHT_COLOR.0, HIGHLIGHT_COLOR.1, HIGHLIGHT_COLOR.2)),
         Anchor::CENTER,
         Transform::from_xyz(0.0, 0.0, 0.0),
         CenterTextMarker,
@@ -101,21 +100,20 @@ pub fn calculate_orp_index(word: &str) -> usize {
 }
 
 pub fn update_word_display(
-    reader_state: Res<ReaderState>,
-    tabs: Res<TabManager>,
-    settings: Res<ReaderSettings>,
-    font_cache: Res<FontCache>,
+    active_tab: Res<ActiveTab>,
+    tabs_q: Query<(&TabFontSettings, &WordsManager)>,
     mut left_q: Query<(&mut Text2d, &mut TextFont), (With<LeftTextMarker>, Without<CenterTextMarker>, Without<RightTextMarker>)>,
-    mut center_q: Query<(&mut Text2d, &mut TextFont, &mut TextColor), (With<CenterTextMarker>, Without<LeftTextMarker>, Without<RightTextMarker>)>,
+    mut center_q: Query<(&mut Text2d, &mut TextFont), (With<CenterTextMarker>, Without<LeftTextMarker>, Without<RightTextMarker>)>,
     mut right_q: Query<(&mut Text2d, &mut TextFont), (With<RightTextMarker>, Without<LeftTextMarker>, Without<CenterTextMarker>)>,
 ) {
-    let Some(tab) = tabs.active_tab() else { return };
-    if tab.words.is_empty() {
+    let Some(entity) = active_tab.entity else { return };
+    let Ok((font_settings, words_mgr)) = tabs_q.get(entity) else { return };
+    if words_mgr.words.is_empty() {
         return;
     }
     
-    let index = reader_state.current_index.min(tab.words.len().saturating_sub(1));
-    let word = &tab.words[index];
+    let index = words_mgr.current_index.min(words_mgr.words.len().saturating_sub(1));
+    let word = &words_mgr.words[index];
     let chars: Vec<char> = word.text.chars().collect();
     let orp_index = calculate_orp_index(&word.text);
     
@@ -123,24 +121,24 @@ pub fn update_word_display(
     let center: String = chars.get(orp_index).map(|c| c.to_string()).unwrap_or_default();
     let right: String = chars.get(orp_index + 1..).map(|s| s.iter().collect()).unwrap_or_default();
     
-    let font_handle = font_cache.current_handle.clone();
+    let font_handle = font_settings.font_handle.clone();
+    let font_size = font_settings.font_size;
     
     if let Ok((mut text, mut font)) = left_q.single_mut() {
         **text = left;
-        font.font_size = settings.font_size;
+        font.font_size = font_size;
         font.font = font_handle.clone();
     }
     
-    if let Ok((mut text, mut font, mut color)) = center_q.single_mut() {
+    if let Ok((mut text, mut font)) = center_q.single_mut() {
         **text = center;
-        font.font_size = settings.font_size;
+        font.font_size = font_size;
         font.font = font_handle.clone();
-        *color = TextColor(settings.highlight_bevy_color());
     }
     
     if let Ok((mut text, mut font)) = right_q.single_mut() {
         **text = right;
-        font.font_size = settings.font_size;
+        font.font_size = font_size;
         font.font = font_handle;
     }
 }
