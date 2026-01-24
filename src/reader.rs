@@ -13,7 +13,7 @@ impl Plugin for ReaderPlugin {
             .init_resource::<ReaderSettings>()
             .init_resource::<FocusModeState>()
             .init_resource::<ReadingTimer>()
-            .add_systems(Startup, (setup_orp_display, load_test_content))
+            .add_systems(Startup, setup_orp_display)
             .add_systems(Update, (
                 handle_input,
                 tick_reader.run_if(in_state(ReadingState::Active)),
@@ -101,19 +101,6 @@ fn setup_orp_display(mut commands: Commands) {
         Transform::from_xyz(half_char, 0.0, 0.0),
         RightTextMarker,
     ));
-}
-
-fn load_test_content(mut reader_state: ResMut<ReaderState>) {
-    let test_text = "The quick brown fox jumps over the lazy dog. \
-        This is a test of the speed reading system. \
-        It should handle punctuation, like commas, and periods. \
-        Can it handle questions? Yes! It can also handle exclamations! \
-        \n\nThis is a new paragraph after a double newline. \
-        The system should pause longer here. \
-        Let's see how it handles longer words like extraordinary or unbelievable.";
-    
-    reader_state.words = parse_text(test_text);
-    reader_state.current_index = 0;
 }
 
 pub fn parse_text(text: &str) -> Vec<Word> {
