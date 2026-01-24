@@ -1,9 +1,17 @@
+//! UI systems using bevy_egui.
+//!
+//! Provides tab bar, playback controls, settings panel, and the new tab dialog.
+//! Uses async file loading to prevent UI freezes.
+
 use bevy::prelude::*;
+use bevy::tasks::{block_on, poll_once, AsyncComputeTaskPool, Task};
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
+use std::path::PathBuf;
 
 use crate::fonts::AvailableFonts;
-use crate::reader::parse_text;
-use crate::state::{ReaderSettings, ReaderState, ReadingState, Tab, TabManager};
+use crate::text_parser::parse_text;
+use crate::state::constants::{WPM_MAX, WPM_MIN, WPM_STEP};
+use crate::state::{ReaderSettings, ReaderState, ReadingState, TabId, TabManager, Word};
 
 #[derive(Resource, Default)]
 pub struct NewTabDialog {
@@ -11,12 +19,24 @@ pub struct NewTabDialog {
     pub text_input: String,
 }
 
+pub struct FileLoadResult {
+    pub path: PathBuf,
+    pub name: String,
+    pub words: Vec<Word>,
+}
+
+#[derive(Resource, Default)]
+pub struct PendingFileLoad {
+    pub task: Option<Task<Option<FileLoadResult>>>,
+}
+
 pub struct UiPlugin;
 
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<NewTabDialog>()
-            .add_systems(Update, sync_tab_to_reader)
+            .init_resource::<PendingFileLoad>()
+            .add_systems(Update, (sync_tab_to_reader, poll_file_load_task))
             .add_systems(EguiPrimaryContextPass, (tab_bar_system, controls_system, new_tab_dialog_system));
     }
 }
@@ -26,26 +46,21 @@ fn tab_bar_system(
     mut tabs: ResMut<TabManager>,
     mut dialog: ResMut<NewTabDialog>,
     mut next_state: ResMut<NextState<ReadingState>>,
-    mut initialized: Local<bool>,
 ) {
-    if !*initialized {
-        *initialized = true;
-        return;
-    }
     let Ok(ctx) = contexts.ctx_mut() else { return };
     
-    let mut tab_to_close: Option<usize> = None;
-    let mut tab_to_select: Option<usize> = None;
+    let mut tab_to_close: Option<TabId> = None;
+    let mut tab_to_select: Option<TabId> = None;
     let mut open_dialog = false;
     
-    // Collect tab info for display
-    let tab_info: Vec<(usize, String, bool)> = tabs.tabs.iter().enumerate()
-        .map(|(i, tab)| (i, tab.name.clone(), tabs.active_index == Some(i)))
+    let active_id = tabs.active_id();
+    let tab_info: Vec<(TabId, String, bool)> = tabs.tabs().iter()
+        .map(|tab| (tab.id, tab.name.clone(), active_id == Some(tab.id)))
         .collect();
     
     egui::TopBottomPanel::top("tabs").show(ctx, |ui| {
         ui.horizontal(|ui| {
-            for (i, name, is_active) in &tab_info {
+            for (id, name, is_active) in &tab_info {
                 let label = if *is_active {
                     egui::RichText::new(name).strong()
                 } else {
@@ -54,10 +69,10 @@ fn tab_bar_system(
                 
                 ui.horizontal(|ui| {
                     if ui.selectable_label(*is_active, label).clicked() {
-                        tab_to_select = Some(*i);
+                        tab_to_select = Some(*id);
                     }
                     if ui.small_button("×").clicked() {
-                        tab_to_close = Some(*i);
+                        tab_to_close = Some(*id);
                     }
                 });
                 ui.separator();
@@ -70,12 +85,12 @@ fn tab_bar_system(
     });
     
     // Apply mutations after UI
-    if let Some(i) = tab_to_select {
-        tabs.active_index = Some(i);
+    if let Some(id) = tab_to_select {
+        tabs.set_active(id);
         next_state.set(ReadingState::Idle);
     }
-    if let Some(i) = tab_to_close {
-        tabs.close_tab(i);
+    if let Some(id) = tab_to_close {
+        tabs.close_tab(id);
         next_state.set(ReadingState::Idle);
     }
     if open_dialog {
@@ -92,18 +107,13 @@ fn controls_system(
     mut next_state: ResMut<NextState<ReadingState>>,
     tabs: Res<TabManager>,
     fonts: Res<AvailableFonts>,
-    mut initialized: Local<bool>,
 ) {
-    if !*initialized {
-        *initialized = true;
-        return;
-    }
     let Ok(ctx) = contexts.ctx_mut() else { return };
     
     egui::TopBottomPanel::bottom("controls").show(ctx, |ui| {
         ui.horizontal(|ui| {
             // Play/Pause button (only if we have a tab)
-            if tabs.active_index.is_some() {
+            if let Some(tab) = tabs.active_tab() {
                 let btn_text = match current_state.get() {
                     ReadingState::Active => "⏸ Pause",
                     _ => "▶ Play",
@@ -116,7 +126,7 @@ fn controls_system(
                 }
                 
                 // Progress
-                let total = reader_state.words.len();
+                let total = tab.words.len();
                 let current = reader_state.current_index + 1;
                 ui.label(format!("{}/{}", current, total));
                 
@@ -131,9 +141,9 @@ fn controls_system(
             
             // WPM slider
             ui.label("WPM:");
-            let mut wpm = settings.wpm as i32;
-            if ui.add(egui::Slider::new(&mut wpm, 100..=1000).step_by(50.0)).changed() {
-                settings.wpm = wpm as u32;
+            let mut wpm = settings.wpm;
+            if ui.add(egui::Slider::new(&mut wpm, WPM_MIN..=WPM_MAX).step_by(WPM_STEP as f64)).changed() {
+                settings.wpm = wpm;
             }
             
             ui.separator();
@@ -170,16 +180,14 @@ fn new_tab_dialog_system(
     mut dialog: ResMut<NewTabDialog>,
     mut tabs: ResMut<TabManager>,
     mut next_state: ResMut<NextState<ReadingState>>,
-    mut initialized: Local<bool>,
+    mut pending_load: ResMut<PendingFileLoad>,
 ) {
-    if !*initialized {
-        *initialized = true;
-        return;
-    }
     if !dialog.open {
         return;
     }
     let Ok(ctx) = contexts.ctx_mut() else { return };
+    
+    let is_loading = pending_load.task.is_some();
     
     egui::Window::new("New Tab")
         .collapsible(false)
@@ -187,27 +195,31 @@ fn new_tab_dialog_system(
         .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
         .show(ctx, |ui| {
             ui.horizontal(|ui| {
-                if ui.button("📂 Load from File").clicked() {
-                    if let Some(path) = rfd::FileDialog::new()
-                        .add_filter("Text files", &["txt"])
-                        .pick_file()
-                    {
-                        if let Ok(content) = std::fs::read_to_string(&path) {
-                            let name = path.file_stem()
-                                .and_then(|s| s.to_str())
-                                .unwrap_or("Untitled")
-                                .to_string();
-                            let words = parse_text(&content);
-                            tabs.add_tab(Tab {
-                                name,
-                                file_path: Some(path),
-                                words,
-                                current_index: 0,
-                            });
-                            dialog.open = false;
-                            next_state.set(ReadingState::Idle);
-                        }
-                    }
+                let btn = ui.add_enabled(!is_loading, egui::Button::new("📂 Load from File"));
+                if btn.clicked() {
+                    let task_pool = AsyncComputeTaskPool::get();
+                    let task = task_pool.spawn(async move {
+                        let file_handle = rfd::AsyncFileDialog::new()
+                            .add_filter("Text files", &["txt"])
+                            .pick_file()
+                            .await?;
+                        
+                        let path = file_handle.path().to_path_buf();
+                        let content = std::fs::read_to_string(&path).ok()?;
+                        let name = path.file_stem()
+                            .and_then(|s| s.to_str())
+                            .unwrap_or("Untitled")
+                            .to_string();
+                        let words = crate::text_parser::parse_text(&content);
+                        
+                        Some(FileLoadResult { path, name, words })
+                    });
+                    pending_load.task = Some(task);
+                }
+                
+                if is_loading {
+                    ui.spinner();
+                    ui.label("Loading...");
                 }
             });
             
@@ -217,7 +229,8 @@ fn new_tab_dialog_system(
             egui::ScrollArea::vertical()
                 .max_height(300.0)
                 .show(ui, |ui| {
-                    ui.add(
+                    ui.add_enabled(
+                        !is_loading,
                         egui::TextEdit::multiline(&mut dialog.text_input)
                             .desired_width(400.0)
                             .desired_rows(10)
@@ -226,22 +239,17 @@ fn new_tab_dialog_system(
                 });
             
             ui.horizontal(|ui| {
-                let can_create = !dialog.text_input.trim().is_empty();
+                let can_create = !dialog.text_input.trim().is_empty() && !is_loading;
                 if ui.add_enabled(can_create, egui::Button::new("Create Tab")).clicked() {
                     let words = parse_text(&dialog.text_input);
-                    let name = format!("Text {}", tabs.tabs.len() + 1);
-                    tabs.add_tab(Tab {
-                        name,
-                        file_path: None,
-                        words,
-                        current_index: 0,
-                    });
+                    let name = format!("Text {}", tabs.tabs().len() + 1);
+                    tabs.add_tab(name, None, words);
                     dialog.open = false;
                     dialog.text_input.clear();
                     next_state.set(ReadingState::Idle);
                 }
                 
-                if ui.button("Cancel").clicked() {
+                if ui.add_enabled(!is_loading, egui::Button::new("Cancel")).clicked() {
                     dialog.open = false;
                     dialog.text_input.clear();
                 }
@@ -249,28 +257,45 @@ fn new_tab_dialog_system(
         });
 }
 
+fn poll_file_load_task(
+    mut pending_load: ResMut<PendingFileLoad>,
+    mut tabs: ResMut<TabManager>,
+    mut dialog: ResMut<NewTabDialog>,
+    mut next_state: ResMut<NextState<ReadingState>>,
+) {
+    let Some(task) = &mut pending_load.task else { return };
+    
+    if let Some(result) = block_on(poll_once(task)) {
+        if let Some(file_result) = result {
+            tabs.add_tab(file_result.name, Some(file_result.path), file_result.words);
+            dialog.open = false;
+            next_state.set(ReadingState::Idle);
+        }
+        pending_load.task = None;
+    }
+}
+
 fn sync_tab_to_reader(
     mut tabs: ResMut<TabManager>,
     mut reader_state: ResMut<ReaderState>,
     current_state: Res<State<ReadingState>>,
 ) {
-    let tab_changed = tabs.active_index != tabs.last_synced_index;
+    let tab_changed = tabs.active_id() != tabs.last_synced_id();
     
-    // Sync from reader back to tab when reading (only if tab hasn't changed)
+    // Sync current_index from reader back to tab when reading (only if tab hasn't changed)
     if !tab_changed && *current_state.get() != ReadingState::Idle {
         if let Some(tab) = tabs.active_tab_mut() {
             tab.current_index = reader_state.current_index;
         }
     }
     
-    // Sync from tab to reader when tab changes
+    // Sync current_index from tab to reader when tab changes
     if tab_changed {
-        tabs.last_synced_index = tabs.active_index;
+        let active_id = tabs.active_id();
+        tabs.set_last_synced(active_id);
         if let Some(tab) = tabs.active_tab() {
-            reader_state.words = tab.words.clone();
             reader_state.current_index = tab.current_index;
         } else {
-            reader_state.words.clear();
             reader_state.current_index = 0;
         }
     }

@@ -1,5 +1,22 @@
+//! Core state types and resources for the reader application.
+//!
+//! Contains the main data structures: `ReaderState`, `ReaderSettings`, `TabManager`, and `Tab`.
+
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
+
+/// Application-wide constants for configuration values.
+pub mod constants {
+    pub const WPM_MIN: u32 = 100;
+    pub const WPM_MAX: u32 = 1000;
+    pub const WPM_STEP: u32 = 50;
+    pub const WORD_SKIP_AMOUNT: usize = 5;
+    pub const RETICLE_OFFSET_Y: f32 = 40.0;
+    pub const RETICLE_WIDTH: f32 = 3.0;
+    pub const RETICLE_HEIGHT: f32 = 40.0;
+    pub const RETICLE_ALPHA: f32 = 0.5;
+    pub const CHAR_WIDTH_RATIO: f32 = 0.6;
+}
 
 #[derive(States, Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub enum ReadingState {
@@ -18,7 +35,6 @@ pub struct Word {
 #[derive(Resource, Default)]
 pub struct ReaderState {
     pub current_index: usize,
-    pub words: Vec<Word>,
 }
 
 
@@ -47,46 +63,91 @@ impl ReaderSettings {
     }
 }
 
-#[derive(Resource, Default, serde::Serialize, serde::Deserialize)]
+pub type TabId = u64;
+
+#[derive(Resource, serde::Serialize, serde::Deserialize)]
 pub struct TabManager {
-    pub tabs: Vec<Tab>,
-    pub active_index: Option<usize>,
+    tabs: Vec<Tab>,
+    active_id: Option<TabId>,
+    next_id: TabId,
     #[serde(skip)]
-    pub last_synced_index: Option<usize>,
+    last_synced_id: Option<TabId>,
+}
+
+impl Default for TabManager {
+    fn default() -> Self {
+        Self {
+            tabs: Vec::new(),
+            active_id: None,
+            next_id: 1,
+            last_synced_id: None,
+        }
+    }
 }
 
 impl TabManager {
+    pub fn tabs(&self) -> &[Tab] {
+        &self.tabs
+    }
+    
+    pub fn active_id(&self) -> Option<TabId> {
+        self.active_id
+    }
+    
+    pub fn set_active(&mut self, id: TabId) {
+        if self.tabs.iter().any(|t| t.id == id) {
+            self.active_id = Some(id);
+        }
+    }
+    
     pub fn active_tab(&self) -> Option<&Tab> {
-        self.active_index.and_then(|i| self.tabs.get(i))
+        self.active_id.and_then(|id| self.tabs.iter().find(|t| t.id == id))
     }
     
     pub fn active_tab_mut(&mut self) -> Option<&mut Tab> {
-        self.active_index.and_then(|i| self.tabs.get_mut(i))
+        self.active_id.and_then(|id| self.tabs.iter_mut().find(|t| t.id == id))
     }
     
-    pub fn add_tab(&mut self, tab: Tab) {
-        self.tabs.push(tab);
-        self.active_index = Some(self.tabs.len() - 1);
+    pub fn add_tab(&mut self, name: String, file_path: Option<std::path::PathBuf>, words: Vec<Word>) -> TabId {
+        let id = self.next_id;
+        self.next_id += 1;
+        self.tabs.push(Tab {
+            id,
+            name,
+            file_path,
+            words,
+            current_index: 0,
+        });
+        self.active_id = Some(id);
+        id
     }
     
-    pub fn close_tab(&mut self, index: usize) {
-        if index < self.tabs.len() {
-            self.tabs.remove(index);
-            if self.tabs.is_empty() {
-                self.active_index = None;
-            } else if let Some(active) = self.active_index {
-                if active >= self.tabs.len() {
-                    self.active_index = Some(self.tabs.len() - 1);
-                } else if active > index {
-                    self.active_index = Some(active - 1);
-                }
-            }
+    pub fn close_tab(&mut self, id: TabId) {
+        let Some(pos) = self.tabs.iter().position(|t| t.id == id) else { return };
+        self.tabs.remove(pos);
+        
+        if self.active_id == Some(id) {
+            // Select adjacent tab or none
+            self.active_id = if self.tabs.is_empty() {
+                None
+            } else {
+                Some(self.tabs[pos.min(self.tabs.len() - 1)].id)
+            };
         }
+    }
+    
+    pub fn last_synced_id(&self) -> Option<TabId> {
+        self.last_synced_id
+    }
+    
+    pub fn set_last_synced(&mut self, id: Option<TabId>) {
+        self.last_synced_id = id;
     }
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct Tab {
+    pub id: TabId,
     pub name: String,
     pub file_path: Option<std::path::PathBuf>,
     pub words: Vec<Word>,

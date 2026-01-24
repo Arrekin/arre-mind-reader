@@ -1,3 +1,9 @@
+//! Settings persistence using RON format.
+//!
+//! Saves and loads tab state (open files, reading positions) to the user's config directory.
+//! Uses debounced saving to avoid excessive disk writes.
+
+use bevy::log::{debug, warn};
 use bevy::prelude::*;
 use std::path::PathBuf;
 
@@ -27,24 +33,51 @@ fn get_config_path() -> Option<PathBuf> {
 
 fn load_tabs() -> TabManager {
     let Some(config_dir) = get_config_path() else {
+        warn!("Could not determine config directory");
         return TabManager::default();
     };
     let path = config_dir.join(TABS_FILE);
     if !path.exists() {
+        debug!("No saved tabs file found at {:?}", path);
         return TabManager::default();
     }
     match std::fs::read_to_string(&path) {
-        Ok(content) => ron::from_str(&content).unwrap_or_default(),
-        Err(_) => TabManager::default(),
+        Ok(content) => match ron::from_str::<TabManager>(&content) {
+            Ok(tabs) => {
+                debug!("Loaded tabs from {:?}", path);
+                tabs
+            }
+            Err(e) => {
+                warn!("Failed to parse tabs file: {}", e);
+                TabManager::default()
+            }
+        },
+        Err(e) => {
+            warn!("Failed to read tabs file: {}", e);
+            TabManager::default()
+        }
     }
 }
 
 fn save_tabs(tabs: &TabManager) {
-    let Some(config_dir) = get_config_path() else { return };
-    let _ = std::fs::create_dir_all(&config_dir);
+    let Some(config_dir) = get_config_path() else {
+        warn!("Could not determine config directory for saving");
+        return;
+    };
+    if let Err(e) = std::fs::create_dir_all(&config_dir) {
+        warn!("Failed to create config directory: {}", e);
+        return;
+    }
     let path = config_dir.join(TABS_FILE);
-    if let Ok(content) = ron::ser::to_string_pretty(tabs, ron::ser::PrettyConfig::default()) {
-        let _ = std::fs::write(path, content);
+    match ron::ser::to_string_pretty(tabs, ron::ser::PrettyConfig::default()) {
+        Ok(content) => {
+            if let Err(e) = std::fs::write(&path, content) {
+                warn!("Failed to write tabs file: {}", e);
+            } else {
+                debug!("Saved tabs to {:?}", path);
+            }
+        }
+        Err(e) => warn!("Failed to serialize tabs: {}", e),
     }
 }
 
@@ -67,12 +100,19 @@ fn persist_tabs(
     }
 }
 
+fn save_tabs_on_exit(mut exit_messages: MessageReader<AppExit>, tabs: Res<TabManager>) {
+    if exit_messages.read().next().is_some() {
+        save_tabs(&tabs);
+    }
+}
+
 pub struct SettingsPlugin;
 
 impl Plugin for SettingsPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(load_tabs())
             .init_resource::<TabSaveTimer>()
-            .add_systems(PostUpdate, persist_tabs);
+            .add_systems(PostUpdate, persist_tabs)
+            .add_systems(Last, save_tabs_on_exit);
     }
 }

@@ -1,10 +1,19 @@
+//! Arre Mind Reader - A speed-reading application using RSVP (Rapid Serial Visual Presentation).
+//!
+//! Built with Bevy 0.18 game engine. Displays words one at a time with the Optical Recognition
+//! Point (ORP) fixed at screen center for optimal reading speed.
+
 use bevy::prelude::*;
 use bevy_egui::EguiPlugin;
 
 mod fonts;
+mod input;
+mod orp;
 mod reader;
 mod settings;
 mod state;
+mod text_parser;
+mod timing;
 mod ui;
 
 fn main() {
