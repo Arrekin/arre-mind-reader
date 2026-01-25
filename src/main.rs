@@ -13,7 +13,6 @@ mod persistence;
 mod reader;
 mod state;
 mod text;
-mod timing;
 mod ui;
 
 fn main() {

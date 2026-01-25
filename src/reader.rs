@@ -1,6 +1,6 @@
 //! Reader plugin - orchestrates the reading experience.
 //!
-//! Manages reading state transitions and timing. Delegates to specialized modules
+//! Manages reading state transitions and timing.
 //! for input handling, ORP display, and timing calculations.
 
 use std::time::Duration;
@@ -10,7 +10,6 @@ use crate::input::InputPlugin;
 use crate::orp::OrpPlugin;
 use crate::state::{ActiveTab};
 use crate::text::Word;
-use crate::timing::ReadingTimer;
 
 pub struct ReaderPlugin;
 impl Plugin for ReaderPlugin {
@@ -72,6 +71,12 @@ impl ReadingState {
         }
     }
 }
+
+#[derive(Resource, Default)]
+pub struct ReadingTimer {
+    pub timer: Timer,
+}
+
 
 // ============================================================================
 // Tab Components
