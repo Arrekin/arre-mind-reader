@@ -12,7 +12,7 @@ mod orp;
 mod persistence;
 mod reader;
 mod state;
-mod text_parser;
+mod text;
 mod timing;
 mod ui;
 

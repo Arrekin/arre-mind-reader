@@ -5,7 +5,8 @@
 use bevy::prelude::*;
 
 use crate::state::constants::*;
-use crate::state::{ActiveTab, ReadingState, TabWpm, WordsManager};
+use crate::state::{ActiveTab};
+use crate::reader::{ReadingState, TabWpm, WordsManager};
 
 pub struct InputPlugin;
 impl Plugin for InputPlugin {
@@ -27,9 +28,9 @@ fn handle_input(
     if keyboard.just_pressed(KeyCode::Space) {
         match current_state.get() {
             ReadingState::Idle | ReadingState::Paused => {
-                next_state.set(ReadingState::Active);
+                next_state.set(ReadingState::Playing);
             }
-            ReadingState::Active => {
+            ReadingState::Playing => {
                 next_state.set(ReadingState::Paused);
             }
         }

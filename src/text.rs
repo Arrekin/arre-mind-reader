@@ -5,7 +5,47 @@
 
 use std::path::Path;
 
-use crate::state::Word;
+use serde::{Deserialize, Serialize};
+
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct Word {
+    pub text: String,
+    pub is_paragraph_end: bool,
+}
+
+impl Word {
+    pub fn orp_index(&self) -> usize {
+        match self.text.chars().count() {
+            0 => 0,
+            1 => 0,
+            2..=5 => 1,
+            6..=9 => 2,
+            10..=13 => 3,
+            _ => 4,
+        }
+    }
+    
+    pub fn display_duration_ms(&self, wpm: u32) -> u64 {
+        let base_ms = 60_000.0 / wpm as f64;
+        let mut multiplier = 1.0f64;
+        
+        if self.text.chars().count() > 10 {
+            multiplier = multiplier.max(1.3);
+        }
+        if self.text.ends_with(',') || self.text.ends_with(';') {
+            multiplier = multiplier.max(2.0);
+        }
+        if self.text.ends_with('.') || self.text.ends_with('?') || self.text.ends_with('!') {
+            multiplier = multiplier.max(3.0);
+        }
+        if self.is_paragraph_end {
+            multiplier = multiplier.max(4.0);
+        }
+        
+        (base_ms * multiplier) as u64
+    }
+}
 
 /// Trait for parsing text content into words. Implement for new file format support.
 pub trait TextParser {

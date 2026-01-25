@@ -11,9 +11,10 @@ use std::path::PathBuf;
 use crate::fonts::FontsStore;
 use crate::state::constants::*;
 use crate::state::{
-    ActiveTab, ReadingState, TabFilePath, TabFontSettings, TabId, TabMarker, TabName, TabWpm, Word, WordsManager,
+    ActiveTab, 
 };
-use crate::text_parser::{TextParser, TxtParser};
+use crate::reader::{ReadingState, TabFilePath, TabFontSettings, TabId, TabMarker, TabWpm,WordsManager};
+use crate::text::{TextParser, TxtParser, Word};
 
 pub struct UiPlugin;
 impl Plugin for UiPlugin {
@@ -57,7 +58,7 @@ fn tab_bar_system(
     mut active_tab: ResMut<ActiveTab>,
     mut dialog: ResMut<NewTabDialog>,
     mut next_state: ResMut<NextState<ReadingState>>,
-    tabs: Query<(Entity, &TabMarker, &TabName)>,
+    tabs: Query<(Entity, &TabMarker, &Name)>,
 ) {
     let Ok(ctx) = contexts.ctx_mut() else { return };
     
@@ -65,25 +66,25 @@ fn tab_bar_system(
     let mut tab_to_select: Option<Entity> = None;
     let mut open_dialog = false;
     
-    let tab_info: Vec<(Entity, TabId, String, bool)> = tabs.iter()
-        .map(|(e, marker, name)| (e, marker.id, name.0.clone(), active_tab.entity == Some(e)))
+    let tab_info: Vec<(Entity, TabId, Name, bool)> = tabs.iter()
+        .map(|(e, marker, name)| (e, marker.id, name.clone(), active_tab.entity == Some(e)))
         .collect();
     
     egui::TopBottomPanel::top("tabs").show(ctx, |ui| {
         ui.horizontal(|ui| {
-            for (entity, _id, name, is_active) in &tab_info {
-                let label = if *is_active {
+            for (entity, _id, name, is_active) in tab_info {
+                let label = if is_active {
                     egui::RichText::new(name).strong()
                 } else {
                     egui::RichText::new(name)
                 };
                 
                 ui.horizontal(|ui| {
-                    if ui.selectable_label(*is_active, label).clicked() {
-                        tab_to_select = Some(*entity);
+                    if ui.selectable_label(is_active, label).clicked() {
+                        tab_to_select = Some(entity);
                     }
                     if ui.small_button("×").clicked() {
-                        tab_to_close = Some(*entity);
+                        tab_to_close = Some(entity);
                     }
                 });
                 ui.separator();
@@ -104,9 +105,9 @@ fn tab_bar_system(
         commands.entity(entity).despawn();
         if active_tab.entity == Some(entity) {
             // Select another tab or none
-            active_tab.entity = tab_info.iter()
-                .filter(|(e, _, _, _)| *e != entity)
-                .map(|(e, _, _, _)| *e)
+            active_tab.entity = tabs.iter()
+                .filter(|(e, _, _)| *e != entity)
+                .map(|(e, _, _)| e)
                 .next();
         }
         next_state.set(ReadingState::Idle);
@@ -132,13 +133,13 @@ fn controls_system(
             if let Some(entity) = active_tab.entity {
                 if let Ok((mut tab_wpm, mut font_settings, words_mgr)) = tabs.get_mut(entity) {
                     let btn_text = match current_state.get() {
-                        ReadingState::Active => "⏸ Pause",
+                        ReadingState::Playing => "⏸ Pause",
                         _ => "▶ Play",
                     };
                     if ui.button(btn_text).clicked() {
                         match current_state.get() {
-                            ReadingState::Active => next_state.set(ReadingState::Paused),
-                            _ => next_state.set(ReadingState::Active),
+                            ReadingState::Playing => next_state.set(ReadingState::Paused),
+                            _ => next_state.set(ReadingState::Playing),
                         }
                     }
                     
@@ -184,7 +185,7 @@ fn controls_system(
             // State indicator
             let state_text = match current_state.get() {
                 ReadingState::Idle => "Idle",
-                ReadingState::Active => "Reading",
+                ReadingState::Playing => "Reading",
                 ReadingState::Paused => "Paused",
             };
             ui.label(format!("[{}]", state_text));
@@ -230,7 +231,7 @@ fn new_tab_dialog_system(
                             .and_then(|s| s.to_str())
                             .unwrap_or("Untitled")
                             .to_string();
-                        let words = crate::text_parser::TxtParser.parse(&content);
+                        let words = crate::text::TxtParser.parse(&content);
                         
                         Some(FileLoadResult { path, name, words })
                     });
@@ -322,7 +323,7 @@ pub fn spawn_tab(
     
     let mut entity_commands = commands.spawn((
         TabMarker { id },
-        TabName(name),
+        Name::new(name),
         TabFontSettings {
             font_name,
             font_handle,

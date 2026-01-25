@@ -3,12 +3,14 @@
 //! Renders the current word with the ORP letter highlighted and centered.
 //! Uses three text entities (left, center, right) to keep the focus letter fixed.
 
+use bevy::color::palettes::css::RED;
 use bevy::prelude::*;
 use bevy::sprite::Anchor;
 
 use crate::fonts::FontsStore;
 use crate::state::constants::*;
-use crate::state::{ActiveTab, TabFontSettings, WordsManager};
+use crate::state::{ActiveTab};
+use crate::reader::{TabFontSettings, WordsManager};
 
 pub struct OrpPlugin;
 impl Plugin for OrpPlugin {
@@ -19,6 +21,11 @@ impl Plugin for OrpPlugin {
             ;
     }
 }
+
+pub const RETICLE_OFFSET_Y: f32 = 40.0;
+pub const RETICLE_WIDTH: f32 = 3.0;
+pub const RETICLE_HEIGHT: f32 = 40.0;
+pub const RETICLE_ALPHA: f32 = 0.5;
 
 // ============================================================================
 // Components
@@ -44,7 +51,7 @@ fn setup_orp_display(
     mut commands: Commands,
     fonts: Res<FontsStore>,
 ) {
-    let reticle_color = Color::srgba(HIGHLIGHT_COLOR.0, HIGHLIGHT_COLOR.1, HIGHLIGHT_COLOR.2, RETICLE_ALPHA);
+    let reticle_color = RED.with_alpha(RETICLE_ALPHA);
     let reticle_size = Vec2::new(RETICLE_WIDTH, RETICLE_HEIGHT);
     let font_size = FONT_SIZE_DEFAULT;
     let font = fonts.default_font().map(|f| f.handle.clone()).unwrap_or_default();
@@ -85,7 +92,7 @@ fn setup_orp_display(
             font_size,
             ..default()
         },
-        TextColor(Color::srgb(HIGHLIGHT_COLOR.0, HIGHLIGHT_COLOR.1, HIGHLIGHT_COLOR.2)),
+        TextColor(RED.into()),
         Anchor::CENTER,
         Transform::from_xyz(0.0, 0.0, 0.0),
         CenterTextMarker,

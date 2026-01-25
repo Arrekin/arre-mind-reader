@@ -8,9 +8,11 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 use crate::fonts::FontsStore;
-use crate::state::{
-    ActiveTab, TabFilePath, TabFontSettings, TabId, TabMarker, TabName, TabWpm, Word, WordsManager,
+use crate::state::ActiveTab;
+use crate::reader::{
+    TabFilePath, TabFontSettings, TabId, TabMarker, TabWpm, WordsManager,
 };
+use crate::text::Word;
 
 pub struct PersistencePlugin;
 impl Plugin for PersistencePlugin {
@@ -140,7 +142,7 @@ fn spawn_tabs_from_program_state(
         
         let mut entity_commands = commands.spawn((
             TabMarker { id: tab.id },
-            TabName(tab.name),
+            Name::new(tab.name),
             TabFontSettings {
                 font_name,
                 font_handle,
@@ -175,7 +177,7 @@ fn persist_program_state(
     tabs: Query<(
         Entity,
         &TabMarker,
-        &TabName,
+        &Name,
         &TabFontSettings,
         &TabWpm,
         &WordsManager,
@@ -197,7 +199,7 @@ fn persist_program_state(
         }
         saved_tabs.push(SavedTab {
             id: marker.id,
-            name: name.0.clone(),
+            name: name.to_string(),
             file_path: file_path.map(|fp| fp.0.clone()),
             font_name: font_settings.font_name.clone(),
             font_size: font_settings.font_size,
