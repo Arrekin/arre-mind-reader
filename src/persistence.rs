@@ -16,8 +16,8 @@ pub struct PersistencePlugin;
 impl Plugin for PersistencePlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<TabSaveTimer>()
-            .add_systems(PostStartup, spawn_tabs_from_saved)
-            .add_systems(Last, persist_tabs)
+            .add_systems(PostStartup, spawn_tabs_from_program_state)
+            .add_systems(Last, persist_program_state)
             ;
     }
 }
@@ -42,10 +42,67 @@ struct SavedTab {
 }
 
 #[derive(Serialize, Deserialize, Default)]
-struct SavedState {
+struct ProgramState {
     tabs: Vec<SavedTab>,
     active_id: Option<TabId>,
     next_id: TabId,
+}
+impl ProgramState {
+    fn get_config_path() -> Option<PathBuf> {
+        dirs::config_dir().map(|p| p.join("arre-mind-reader"))
+    }
+
+    fn save(&self) {
+        let Some(config_dir) = Self::get_config_path() else {
+            warn!("Could not determine config directory for saving");
+            return;
+        };
+        if let Err(e) = std::fs::create_dir_all(&config_dir) {
+            warn!("Failed to create config directory: {}", e);
+            return;
+        }
+        let path = config_dir.join(TABS_FILE);
+        match ron::ser::to_string_pretty(self, ron::ser::PrettyConfig::default()) {
+            Ok(content) => {
+                if let Err(e) = std::fs::write(&path, content) {
+                    warn!("Failed to write tabs file: {}", e);
+                } else {
+                    debug!("Saved {} tabs to {:?}", self.tabs.len(), path);
+                }
+            }
+            Err(e) => warn!("Failed to serialize tabs: {}", e),
+        }
+    }
+
+    fn load() -> Self {
+        let Some(config_dir) = Self::get_config_path() else {
+            warn!("Could not determine config directory");
+            return ProgramState::default();
+        };
+        let path = config_dir.join(TABS_FILE);
+        if !path.exists() {
+            debug!("No saved tabs file found at {:?}", path);
+            return ProgramState::default();
+        }
+        match std::fs::read_to_string(&path) {
+            Ok(content) => match ron::from_str::<ProgramState>(&content) {
+                Ok(state) => {
+                    debug!("Loaded {} tabs from {:?}", state.tabs.len(), path);
+                    state
+                }
+                Err(e) => {
+                    warn!("Failed to parse tabs file: {}", e);
+                    ProgramState::default()
+                }
+            },
+            Err(e) => {
+                warn!("Failed to read tabs file: {}", e);
+                ProgramState::default()
+            }
+        }
+    }
+
+
 }
 
 #[derive(Resource)]
@@ -62,81 +119,21 @@ impl Default for TabSaveTimer {
 }
 
 // ============================================================================
-// File I/O
-// ============================================================================
-
-fn get_config_path() -> Option<PathBuf> {
-    dirs::config_dir().map(|p| p.join("arre-mind-reader"))
-}
-
-fn load_saved_state() -> SavedState {
-    let Some(config_dir) = get_config_path() else {
-        warn!("Could not determine config directory");
-        return SavedState::default();
-    };
-    let path = config_dir.join(TABS_FILE);
-    if !path.exists() {
-        debug!("No saved tabs file found at {:?}", path);
-        return SavedState::default();
-    }
-    match std::fs::read_to_string(&path) {
-        Ok(content) => match ron::from_str::<SavedState>(&content) {
-            Ok(state) => {
-                debug!("Loaded {} tabs from {:?}", state.tabs.len(), path);
-                state
-            }
-            Err(e) => {
-                warn!("Failed to parse tabs file: {}", e);
-                SavedState::default()
-            }
-        },
-        Err(e) => {
-            warn!("Failed to read tabs file: {}", e);
-            SavedState::default()
-        }
-    }
-}
-
-fn save_state(state: &SavedState) {
-    let Some(config_dir) = get_config_path() else {
-        warn!("Could not determine config directory for saving");
-        return;
-    };
-    if let Err(e) = std::fs::create_dir_all(&config_dir) {
-        warn!("Failed to create config directory: {}", e);
-        return;
-    }
-    let path = config_dir.join(TABS_FILE);
-    match ron::ser::to_string_pretty(state, ron::ser::PrettyConfig::default()) {
-        Ok(content) => {
-            if let Err(e) = std::fs::write(&path, content) {
-                warn!("Failed to write tabs file: {}", e);
-            } else {
-                debug!("Saved {} tabs to {:?}", state.tabs.len(), path);
-            }
-        }
-        Err(e) => warn!("Failed to serialize tabs: {}", e),
-    }
-}
-
-// ============================================================================
 // Systems
 // ============================================================================
 
-fn spawn_tabs_from_saved(
+fn spawn_tabs_from_program_state(
     mut commands: Commands,
     mut active_tab: ResMut<ActiveTab>,
     fonts: Res<FontsStore>,
 ) {
-    let saved = load_saved_state();
-    if saved.tabs.is_empty() {
-        return;
-    }
-    
-    active_tab.set_next_id(saved.next_id);
+    let program_state = ProgramState::load();
+
+    active_tab.set_next_id(program_state.next_id);
     
     let mut active_entity = None;
-    for tab in saved.tabs {
+    let total_tabs = program_state.tabs.len();
+    for tab in program_state.tabs {
         let font_data = fonts.get_by_name(&tab.font_name).or_else(|| fonts.default_font());
         let font_name = font_data.map(|f| f.name.clone()).unwrap_or_default();
         let font_handle = font_data.map(|f| f.handle.clone()).unwrap_or_default();
@@ -161,18 +158,21 @@ fn spawn_tabs_from_saved(
         }
         
         let entity = entity_commands.id();
-        if saved.active_id == Some(tab.id) {
+        if program_state.active_id == Some(tab.id) {
             active_entity = Some(entity);
         }
     }
     
     active_tab.entity = active_entity;
-    info!("Restored {} tabs from saved state", saved.next_id.saturating_sub(1));
+    info!("Restored {} tabs from saved state", total_tabs);
 }
 
-fn collect_saved_state(
-    active_tab: &ActiveTab,
-    tabs: &Query<(
+fn persist_program_state(
+    time: Res<Time>,
+    mut save_timer: ResMut<TabSaveTimer>,
+    active_tab: Res<ActiveTab>,
+    app_exit_events: MessageReader<AppExit>,
+    tabs: Query<(
         Entity,
         &TabMarker,
         &TabName,
@@ -181,7 +181,11 @@ fn collect_saved_state(
         &WordsManager,
         Option<&TabFilePath>,
     )>,
-) -> SavedState {
+) {
+    save_timer.timer.tick(time.delta());
+    if !save_timer.timer.just_finished() && app_exit_events.is_empty() { return; }
+
+    // Collect data for the save
     let mut saved_tabs = Vec::new();
     let mut active_id = None;
     let mut max_id: TabId = 0;
@@ -203,31 +207,10 @@ fn collect_saved_state(
         });
     }
     
-    SavedState {
+    ProgramState {
         tabs: saved_tabs,
         active_id,
         next_id: max_id + 1,
-    }
-}
-
-fn persist_tabs(
-    time: Res<Time>,
-    mut save_timer: ResMut<TabSaveTimer>,
-    active_tab: Res<ActiveTab>,
-    app_exit_events: MessageReader<AppExit>,
-    tabs: Query<(
-        Entity,
-        &TabMarker,
-        &TabName,
-        &TabFontSettings,
-        &TabWpm,
-        &WordsManager,
-        Option<&TabFilePath>,
-    )>,
-) {
-    save_timer.timer.tick(time.delta());
-    if save_timer.timer.just_finished() || !app_exit_events.is_empty() {
-        let state = collect_saved_state(&active_tab, &tabs);
-        save_state(&state);
-    }
+    }.save();
+    info!("The program state was saved");
 }
