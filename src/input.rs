@@ -7,12 +7,21 @@ use bevy::prelude::*;
 use crate::state::constants::*;
 use crate::state::{ActiveTab, ReadingState, TabWpm, WordsManager};
 
-pub fn handle_input(
+pub struct InputPlugin;
+impl Plugin for InputPlugin {
+    fn build(&self, app: &mut App) {
+        app
+            .add_systems(Update, handle_input)
+            ;
+    }
+}
+
+fn handle_input(
     keyboard: Res<ButtonInput<KeyCode>>,
     current_state: Res<State<ReadingState>>,
     mut next_state: ResMut<NextState<ReadingState>>,
     active_tab: Res<ActiveTab>,
-    mut tabs_q: Query<(&mut TabWpm, &mut WordsManager)>,
+    mut tabs: Query<(&mut TabWpm, &mut WordsManager)>,
 ) {
     // Space: toggle play/pause
     if keyboard.just_pressed(KeyCode::Space) {
@@ -32,7 +41,7 @@ pub fn handle_input(
     }
     
     let Some(entity) = active_tab.entity else { return };
-    let Ok((mut tab_wpm, mut words_mgr)) = tabs_q.get_mut(entity) else { return };
+    let Ok((mut tab_wpm, mut words_mgr)) = tabs.get_mut(entity) else { return };
     
     // R: restart
     if keyboard.just_pressed(KeyCode::KeyR) {

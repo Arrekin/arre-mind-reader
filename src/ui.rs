@@ -9,16 +9,36 @@ use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 use std::path::PathBuf;
 
 use crate::fonts::FontsStore;
-use crate::text_parser::parse_text;
 use crate::state::constants::*;
 use crate::state::{
     ActiveTab, ReadingState, TabFilePath, TabFontSettings, TabId, TabMarker, TabName, TabWpm, Word, WordsManager,
 };
+use crate::text_parser::{TextParser, TxtParser};
+
+pub struct UiPlugin;
+impl Plugin for UiPlugin {
+    fn build(&self, app: &mut App) {
+        app.init_resource::<NewTabDialog>()
+            .init_resource::<PendingFileLoad>()
+            .add_systems(Update, poll_file_load_task)
+            .add_systems(EguiPrimaryContextPass, (tab_bar_system, controls_system, new_tab_dialog_system))
+            ;
+    }
+}
+
+// ============================================================================
+// Resources
+// ============================================================================
 
 #[derive(Resource, Default)]
 pub struct NewTabDialog {
     pub open: bool,
     pub text_input: String,
+}
+
+#[derive(Resource, Default)]
+pub struct PendingFileLoad {
+    pub task: Option<Task<Option<FileLoadResult>>>,
 }
 
 pub struct FileLoadResult {
@@ -27,21 +47,9 @@ pub struct FileLoadResult {
     pub words: Vec<Word>,
 }
 
-#[derive(Resource, Default)]
-pub struct PendingFileLoad {
-    pub task: Option<Task<Option<FileLoadResult>>>,
-}
-
-pub struct UiPlugin;
-
-impl Plugin for UiPlugin {
-    fn build(&self, app: &mut App) {
-        app.init_resource::<NewTabDialog>()
-            .init_resource::<PendingFileLoad>()
-            .add_systems(Update, poll_file_load_task)
-            .add_systems(EguiPrimaryContextPass, (tab_bar_system, controls_system, new_tab_dialog_system));
-    }
-}
+// ============================================================================
+// Systems
+// ============================================================================
 
 fn tab_bar_system(
     mut commands: Commands,
@@ -49,7 +57,7 @@ fn tab_bar_system(
     mut active_tab: ResMut<ActiveTab>,
     mut dialog: ResMut<NewTabDialog>,
     mut next_state: ResMut<NextState<ReadingState>>,
-    tabs_q: Query<(Entity, &TabMarker, &TabName)>,
+    tabs: Query<(Entity, &TabMarker, &TabName)>,
 ) {
     let Ok(ctx) = contexts.ctx_mut() else { return };
     
@@ -57,7 +65,7 @@ fn tab_bar_system(
     let mut tab_to_select: Option<Entity> = None;
     let mut open_dialog = false;
     
-    let tab_info: Vec<(Entity, TabId, String, bool)> = tabs_q.iter()
+    let tab_info: Vec<(Entity, TabId, String, bool)> = tabs.iter()
         .map(|(e, marker, name)| (e, marker.id, name.0.clone(), active_tab.entity == Some(e)))
         .collect();
     
@@ -115,14 +123,14 @@ fn controls_system(
     current_state: Res<State<ReadingState>>,
     mut next_state: ResMut<NextState<ReadingState>>,
     fonts: Res<FontsStore>,
-    mut tabs_q: Query<(&mut TabWpm, &mut TabFontSettings, &WordsManager)>,
+    mut tabs: Query<(&mut TabWpm, &mut TabFontSettings, &WordsManager)>,
 ) {
     let Ok(ctx) = contexts.ctx_mut() else { return };
     
     egui::TopBottomPanel::bottom("controls").show(ctx, |ui| {
         ui.horizontal(|ui| {
             if let Some(entity) = active_tab.entity {
-                if let Ok((mut tab_wpm, mut font_settings, words_mgr)) = tabs_q.get_mut(entity) {
+                if let Ok((mut tab_wpm, mut font_settings, words_mgr)) = tabs.get_mut(entity) {
                     let btn_text = match current_state.get() {
                         ReadingState::Active => "⏸ Pause",
                         _ => "▶ Play",
@@ -192,7 +200,7 @@ fn new_tab_dialog_system(
     mut next_state: ResMut<NextState<ReadingState>>,
     mut pending_load: ResMut<PendingFileLoad>,
     fonts: Res<FontsStore>,
-    tabs_q: Query<&TabMarker>,
+    tabs: Query<&TabMarker>,
 ) {
     if !dialog.open {
         return;
@@ -222,7 +230,7 @@ fn new_tab_dialog_system(
                             .and_then(|s| s.to_str())
                             .unwrap_or("Untitled")
                             .to_string();
-                        let words = crate::text_parser::parse_text(&content);
+                        let words = crate::text_parser::TxtParser.parse(&content);
                         
                         Some(FileLoadResult { path, name, words })
                     });
@@ -253,8 +261,8 @@ fn new_tab_dialog_system(
             ui.horizontal(|ui| {
                 let can_create = !dialog.text_input.trim().is_empty() && !is_loading;
                 if ui.add_enabled(can_create, egui::Button::new("Create Tab")).clicked() {
-                    let words = parse_text(&dialog.text_input);
-                    let tab_count = tabs_q.iter().count();
+                    let words = TxtParser.parse(&dialog.text_input);
+                    let tab_count = tabs.iter().count();
                     let name = format!("Text {}", tab_count + 1);
                     let entity = spawn_tab(&mut commands, &mut active_tab, &fonts, name, None, words);
                     active_tab.entity = Some(entity);

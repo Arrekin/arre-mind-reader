@@ -1,7 +1,6 @@
-//! Settings persistence using RON format.
+//! Persistence for tab state using RON format.
 //!
 //! Saves and loads tab state (open files, reading positions) to the user's config directory.
-//! Uses debounced saving to avoid excessive disk writes.
 
 use bevy::log::{debug, info, warn};
 use bevy::prelude::*;
@@ -13,8 +12,22 @@ use crate::state::{
     ActiveTab, TabFilePath, TabFontSettings, TabId, TabMarker, TabName, TabWpm, Word, WordsManager,
 };
 
+pub struct PersistencePlugin;
+impl Plugin for PersistencePlugin {
+    fn build(&self, app: &mut App) {
+        app.init_resource::<TabSaveTimer>()
+            .add_systems(PostStartup, spawn_tabs_from_saved)
+            .add_systems(Last, persist_tabs)
+            ;
+    }
+}
+
 const TABS_FILE: &str = "tabs.ron";
-const SAVE_DEBOUNCE_SECS: f32 = 5.0;
+const SAVE_INTERVAL_SECS: f32 = 5.0;
+
+// ============================================================================
+// Persistence-only Data Structures
+// ============================================================================
 
 #[derive(Serialize, Deserialize)]
 struct SavedTab {
@@ -39,13 +52,18 @@ struct SavedState {
 struct TabSaveTimer {
     timer: Timer,
 }
+
 impl Default for TabSaveTimer {
     fn default() -> Self {
         Self {
-            timer: Timer::from_seconds(SAVE_DEBOUNCE_SECS, TimerMode::Repeating),
+            timer: Timer::from_seconds(SAVE_INTERVAL_SECS, TimerMode::Repeating),
         }
     }
 }
+
+// ============================================================================
+// File I/O
+// ============================================================================
 
 fn get_config_path() -> Option<PathBuf> {
     dirs::config_dir().map(|p| p.join("arre-mind-reader"))
@@ -101,6 +119,10 @@ fn save_state(state: &SavedState) {
     }
 }
 
+// ============================================================================
+// Systems
+// ============================================================================
+
 fn spawn_tabs_from_saved(
     mut commands: Commands,
     mut active_tab: ResMut<ActiveTab>,
@@ -150,7 +172,7 @@ fn spawn_tabs_from_saved(
 
 fn collect_saved_state(
     active_tab: &ActiveTab,
-    tabs_q: &Query<(
+    tabs: &Query<(
         Entity,
         &TabMarker,
         &TabName,
@@ -160,16 +182,16 @@ fn collect_saved_state(
         Option<&TabFilePath>,
     )>,
 ) -> SavedState {
-    let mut tabs = Vec::new();
+    let mut saved_tabs = Vec::new();
     let mut active_id = None;
     let mut max_id: TabId = 0;
     
-    for (entity, marker, name, font_settings, wpm, words_mgr, file_path) in tabs_q.iter() {
+    for (entity, marker, name, font_settings, wpm, words_mgr, file_path) in tabs.iter() {
         max_id = max_id.max(marker.id);
         if active_tab.entity == Some(entity) {
             active_id = Some(marker.id);
         }
-        tabs.push(SavedTab {
+        saved_tabs.push(SavedTab {
             id: marker.id,
             name: name.0.clone(),
             file_path: file_path.map(|fp| fp.0.clone()),
@@ -182,7 +204,7 @@ fn collect_saved_state(
     }
     
     SavedState {
-        tabs,
+        tabs: saved_tabs,
         active_id,
         next_id: max_id + 1,
     }
@@ -192,7 +214,8 @@ fn persist_tabs(
     time: Res<Time>,
     mut save_timer: ResMut<TabSaveTimer>,
     active_tab: Res<ActiveTab>,
-    tabs_q: Query<(
+    app_exit_events: MessageReader<AppExit>,
+    tabs: Query<(
         Entity,
         &TabMarker,
         &TabName,
@@ -202,24 +225,9 @@ fn persist_tabs(
         Option<&TabFilePath>,
     )>,
 ) {
-    // Always tick timer and save periodically when tabs exist
-    if tabs_q.is_empty() {
-        return;
-    }
-    
     save_timer.timer.tick(time.delta());
-    if save_timer.timer.just_finished() {
-        let state = collect_saved_state(&active_tab, &tabs_q);
+    if save_timer.timer.just_finished() || !app_exit_events.is_empty() {
+        let state = collect_saved_state(&active_tab, &tabs);
         save_state(&state);
-    }
-}
-
-pub struct SettingsPlugin;
-
-impl Plugin for SettingsPlugin {
-    fn build(&self, app: &mut App) {
-        app.init_resource::<TabSaveTimer>()
-            .add_systems(PostStartup, spawn_tabs_from_saved)
-            .add_systems(PostUpdate, persist_tabs);
     }
 }

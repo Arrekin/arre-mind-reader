@@ -18,7 +18,6 @@ pub trait TextParser {
 }
 
 pub struct TxtParser;
-
 impl TextParser for TxtParser {
     fn can_parse(path: &Path) -> bool {
         path.extension()
@@ -49,10 +48,6 @@ impl TextParser for TxtParser {
         
         words
     }
-}
-
-pub fn parse_text(content: &str) -> Vec<Word> {
-    TxtParser.parse(content)
 }
 
 /// Returns an appropriate parser for the given file path, or None if unsupported.

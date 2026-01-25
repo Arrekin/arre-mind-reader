@@ -10,19 +10,37 @@ use crate::fonts::FontsStore;
 use crate::state::constants::*;
 use crate::state::{ActiveTab, TabFontSettings, WordsManager};
 
-#[derive(Component)]
-pub struct LeftTextMarker;
+pub struct OrpPlugin;
+impl Plugin for OrpPlugin {
+    fn build(&self, app: &mut App) {
+        app
+            .add_systems(Startup, setup_orp_display)
+            .add_systems(Update, update_word_display)
+            ;
+    }
+}
+
+// ============================================================================
+// Components
+// ============================================================================
 
 #[derive(Component)]
-pub struct CenterTextMarker;
+struct LeftTextMarker;
 
 #[derive(Component)]
-pub struct RightTextMarker;
+struct CenterTextMarker;
 
 #[derive(Component)]
-pub struct ReticleMarker;
+struct RightTextMarker;
 
-pub fn setup_orp_display(
+#[derive(Component)]
+struct ReticleMarker;
+
+// ============================================================================
+// Systems
+// ============================================================================
+
+fn setup_orp_display(
     mut commands: Commands,
     fonts: Res<FontsStore>,
 ) {
@@ -88,26 +106,15 @@ pub fn setup_orp_display(
     ));
 }
 
-pub fn calculate_orp_index(word: &str) -> usize {
-    match word.chars().count() {
-        0 => 0,
-        1 => 0,
-        2..=5 => 1,
-        6..=9 => 2,
-        10..=13 => 3,
-        _ => 4,
-    }
-}
-
-pub fn update_word_display(
+fn update_word_display(
     active_tab: Res<ActiveTab>,
-    tabs_q: Query<(&TabFontSettings, &WordsManager)>,
-    mut left_q: Query<(&mut Text2d, &mut TextFont), (With<LeftTextMarker>, Without<CenterTextMarker>, Without<RightTextMarker>)>,
-    mut center_q: Query<(&mut Text2d, &mut TextFont), (With<CenterTextMarker>, Without<LeftTextMarker>, Without<RightTextMarker>)>,
-    mut right_q: Query<(&mut Text2d, &mut TextFont), (With<RightTextMarker>, Without<LeftTextMarker>, Without<CenterTextMarker>)>,
+    tabs: Query<(&TabFontSettings, &WordsManager)>,
+    mut left_texts: Query<(&mut Text2d, &mut TextFont), (With<LeftTextMarker>, Without<CenterTextMarker>, Without<RightTextMarker>)>,
+    mut center_texts: Query<(&mut Text2d, &mut TextFont), (With<CenterTextMarker>, Without<LeftTextMarker>, Without<RightTextMarker>)>,
+    mut right_texts: Query<(&mut Text2d, &mut TextFont), (With<RightTextMarker>, Without<LeftTextMarker>, Without<CenterTextMarker>)>,
 ) {
     let Some(entity) = active_tab.entity else { return };
-    let Ok((font_settings, words_mgr)) = tabs_q.get(entity) else { return };
+    let Ok((font_settings, words_mgr)) = tabs.get(entity) else { return };
     if words_mgr.words.is_empty() {
         return;
     }
@@ -115,7 +122,7 @@ pub fn update_word_display(
     let index = words_mgr.current_index.min(words_mgr.words.len().saturating_sub(1));
     let word = &words_mgr.words[index];
     let chars: Vec<char> = word.text.chars().collect();
-    let orp_index = calculate_orp_index(&word.text);
+    let orp_index = word.orp_index();
     
     let left: String = chars[..orp_index].iter().collect();
     let center: String = chars.get(orp_index).map(|c| c.to_string()).unwrap_or_default();
@@ -124,19 +131,19 @@ pub fn update_word_display(
     let font_handle = font_settings.font_handle.clone();
     let font_size = font_settings.font_size;
     
-    if let Ok((mut text, mut font)) = left_q.single_mut() {
+    if let Ok((mut text, mut font)) = left_texts.single_mut() {
         **text = left;
         font.font_size = font_size;
         font.font = font_handle.clone();
     }
     
-    if let Ok((mut text, mut font)) = center_q.single_mut() {
+    if let Ok((mut text, mut font)) = center_texts.single_mut() {
         **text = center;
         font.font_size = font_size;
         font.font = font_handle.clone();
     }
     
-    if let Ok((mut text, mut font)) = right_q.single_mut() {
+    if let Ok((mut text, mut font)) = right_texts.single_mut() {
         **text = right;
         font.font_size = font_size;
         font.font = font_handle;

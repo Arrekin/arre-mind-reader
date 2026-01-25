@@ -17,16 +17,18 @@ Arre Mind Reader is a speed-reading application built with Bevy 0.18 and Rust. I
 - **Stable Tab IDs:** Tabs use `TabId` (u64) in `TabMarker` for reliable identification across save/load.
 
 ## Module Structure
+Each file follows: imports → Plugin definition → constants → types/components → systems
+
 - `main.rs` - App entry point, plugin registration
-- `state.rs` - Tab entity components (`TabMarker`, `TabName`, `TabFontSettings`, `TabWpm`, `TabFilePath`, `WordsManager`), `ActiveTab` resource, `ReadingState`, `Word`, and `constants` module
-- `reader.rs` - Plugin orchestration, timing tick, reading state transitions
-- `orp.rs` - ORP calculation, display entity setup, word display updates (hardcoded red highlight)
-- `timing.rs` - `ReadingTimer` resource and `calc_delay()` for smart timing
-- `input.rs` - Keyboard input handling (play/pause, navigation, WPM)
-- `text_parser.rs` - `TextParser` trait and `TxtParser` implementation
-- `fonts.rs` - `FontsStore` resource with `Vec<FontData>`, scans assets/fonts at startup
-- `settings.rs` - Persistence (RON format), periodic tab saving, spawns tab entities on load
-- `ui.rs` - Egui UI: tab bar, controls, new tab dialog with async file loading, `spawn_tab()` helper
+- `state.rs` - Core types: `Word` (with `orp_index()` and `display_duration_ms()` methods), tab components (`TabMarker`, `TabName`, `TabFontSettings`, `TabWpm`, `TabFilePath`, `WordsManager`), `ActiveTab` resource, `ReadingState`, `constants` module
+- `reader.rs` - `ReaderPlugin` orchestrates sub-plugins (`OrpPlugin`, `InputPlugin`), manages reading state transitions and timing tick
+- `orp.rs` - `OrpPlugin` with display entity setup, word display updates (hardcoded red highlight)
+- `timing.rs` - `ReadingTimer` resource only (timing logic moved to `Word::display_duration_ms()`)
+- `input.rs` - `InputPlugin` with keyboard handling (play/pause, navigation, WPM)
+- `text_parser.rs` - `TextParser` trait and `TxtParser` implementation (use `TxtParser.parse()` directly)
+- `fonts.rs` - `FontsPlugin` with `FontsStore` resource, scans assets/fonts at startup
+- `persistence.rs` - `PersistencePlugin` with RON format save/load, spawns tab entities on load
+- `ui.rs` - `UiPlugin` with tab bar, controls, new tab dialog, async file loading, `spawn_tab()` helper
 
 ## Dependencies
 - `bevy` 0.18 - Game engine
@@ -49,10 +51,11 @@ Arre Mind Reader is a speed-reading application built with Bevy 0.18 and Rust. I
 - `↑/↓` - Adjust WPM ±50
 - `R` - Restart
 
-## ORP Algorithm
+## Word Methods
+ORP index calculation (`Word::orp_index()`):
 ```rust
-match word.chars().count() {
-    1 => 0,
+match self.text.chars().count() {
+    0 | 1 => 0,
     2..=5 => 1,
     6..=9 => 2,
     10..=13 => 3,
@@ -60,9 +63,40 @@ match word.chars().count() {
 }
 ```
 
-## Delay Multipliers (use max, not cumulative)
+Display duration (`Word::display_duration_ms(wpm)`) - uses max multiplier, not cumulative:
 - Base: `60000 / WPM` ms
 - Long word (>10 chars): ×1.3
 - Comma/semicolon: ×2.0
 - Period/question/exclamation: ×3.0
 - Paragraph end: ×4.0
+
+## Code Style
+- Query variables use plural form (e.g., `tabs`, `left_texts`), not `_q` suffix
+- Behavior lives with data: `Word` has `orp_index()` and `display_duration_ms()` methods
+- Each module with a plugin defines it near the top after imports
+- Don't put newlines between struct and its impl blocks
+
+### Plugin code style
+```rust
+pub struct InputPlugin;
+impl Plugin for InputPlugin {
+    fn build(&self, app: &mut App) {
+        app
+            .add_systems(Update, handle_input)
+            ;
+    }
+}
+```
+Note: no new line between struct and impl, each app usage on its own line and finishing semicolon also on its own line.
+
+### Coupling code style
+If given component represents logical whole and owns specific systems, put its system within its impl block, f.e
+```rust
+#[derive(Component)]
+pub struct MyComponent;
+impl MyComponent {
+    fn system() {
+        // System code, keep it private be default as it should only be used in local plugin
+    }
+}
+```

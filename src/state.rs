@@ -6,6 +6,10 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+// ============================================================================
+// Constants
+// ============================================================================
+
 pub mod constants {
     pub const WPM_DEFAULT: u32 = 300;
     pub const WPM_MIN: u32 = 100;
@@ -21,6 +25,10 @@ pub mod constants {
     pub const HIGHLIGHT_COLOR: (f32, f32, f32) = (1.0, 0.0, 0.0);
 }
 
+// ============================================================================
+// Reading State
+// ============================================================================
+
 #[derive(States, Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub enum ReadingState {
     #[default]
@@ -35,8 +43,41 @@ pub struct Word {
     pub is_paragraph_end: bool,
 }
 
+impl Word {
+    pub fn orp_index(&self) -> usize {
+        match self.text.chars().count() {
+            0 => 0,
+            1 => 0,
+            2..=5 => 1,
+            6..=9 => 2,
+            10..=13 => 3,
+            _ => 4,
+        }
+    }
+    
+    pub fn display_duration_ms(&self, wpm: u32) -> u64 {
+        let base_ms = 60_000.0 / wpm as f64;
+        let mut multiplier = 1.0f64;
+        
+        if self.text.chars().count() > 10 {
+            multiplier = multiplier.max(1.3);
+        }
+        if self.text.ends_with(',') || self.text.ends_with(';') {
+            multiplier = multiplier.max(2.0);
+        }
+        if self.text.ends_with('.') || self.text.ends_with('?') || self.text.ends_with('!') {
+            multiplier = multiplier.max(3.0);
+        }
+        if self.is_paragraph_end {
+            multiplier = multiplier.max(4.0);
+        }
+        
+        (base_ms * multiplier) as u64
+    }
+}
+
 // ============================================================================
-// Tab Entity Components
+// Tab Components
 // ============================================================================
 
 pub type TabId = u64;
@@ -69,7 +110,7 @@ pub struct WordsManager {
 }
 
 // ============================================================================
-// Active Tab Resource
+// Resources
 // ============================================================================
 
 #[derive(Resource, Default)]

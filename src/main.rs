@@ -9,8 +9,8 @@ use bevy_egui::EguiPlugin;
 mod fonts;
 mod input;
 mod orp;
+mod persistence;
 mod reader;
-mod settings;
 mod state;
 mod text_parser;
 mod timing;
@@ -30,7 +30,7 @@ fn main() {
         .add_plugins((
             fonts::FontsPlugin, 
             reader::ReaderPlugin, 
-            settings::SettingsPlugin, 
+            persistence::PersistencePlugin, 
             ui::UiPlugin
         ))
         .add_systems(Startup, setup)
