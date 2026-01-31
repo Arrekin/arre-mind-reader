@@ -5,19 +5,22 @@
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 
-use crate::tabs::{ActiveTab, TabClose, TabMarker, TabSelect};
+use crate::tabs::{ActiveTab, TabClose, TabMarker, TabOrder, TabSelect};
 use super::NewTabDialog;
 
 pub fn tab_bar_system(
     mut commands: Commands,
     mut contexts: EguiContexts,
     mut dialog: ResMut<NewTabDialog>,
-    tabs: Query<(Entity, &Name, Has<ActiveTab>), With<TabMarker>>,
+    tab_order: Res<TabOrder>,
+    tabs: Query<(&Name, Has<ActiveTab>), With<TabMarker>>,
 ) {
     let Ok(ctx) = contexts.ctx_mut() else { return };
     
-    let tab_info: Vec<(Entity, Name, bool)> = tabs.iter()
-        .map(|(e, name, is_active)| (e, name.clone(), is_active))
+    let tab_info: Vec<(Entity, Name, bool)> = tab_order.0.iter()
+        .filter_map(|&entity| {
+            tabs.get(entity).ok().map(|(name, is_active)| (entity, name.clone(), is_active))
+        })
         .collect();
     
     egui::TopBottomPanel::top("tabs").show(ctx, |ui| {

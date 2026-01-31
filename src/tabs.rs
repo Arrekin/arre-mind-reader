@@ -13,10 +13,30 @@ pub struct TabsPlugin;
 impl Plugin for TabsPlugin {
     fn build(&self, app: &mut App) {
         app
+            .init_resource::<TabOrder>()
             .add_observer(TabSelect::on_trigger)
             .add_observer(TabClose::on_trigger)
             .add_observer(TabCreate::on_trigger)
+            .add_observer(TabOrder::on_tab_added)
+            .add_observer(TabOrder::on_tab_removed)
             ;
+    }
+}
+
+// ============================================================================
+// Resources
+// ============================================================================
+
+/// Maintains ordered list of tab entities for consistent UI display.
+#[derive(Resource, Default)]
+pub struct TabOrder(pub Vec<Entity>);
+impl TabOrder {
+    fn on_tab_added(trigger: On<Add, TabMarker>, mut order: ResMut<TabOrder>) {
+        order.0.push(trigger.event_target());
+    }
+
+    fn on_tab_removed(trigger: On<Remove, TabMarker>, mut order: ResMut<TabOrder>) {
+        order.0.retain(|&e| e != trigger.event_target());
     }
 }
 
@@ -91,17 +111,22 @@ impl TabClose {
     fn on_trigger(
         trigger: On<TabClose>,
         mut commands: Commands,
-        tabs: Query<(Entity, Has<ActiveTab>), With<TabMarker>>,
+        tab_order: Res<TabOrder>,
+        tabs: Query<Has<ActiveTab>, With<TabMarker>>,
     ) {
         let target = trigger.entity;
-        let was_active = tabs.iter().any(|(e, is_active)| e == target && is_active);
+        let was_active = tabs.get(target).is_ok_and(|is_active| is_active);
         
         commands.entity(target).despawn();
         
-        // If closed tab was active, select another
+        // If closed tab was active, select adjacent tab from ordered list
         if was_active {
-            if let Some((other_entity, _)) = tabs.iter().find(|(e, _)| *e != target) {
-                commands.trigger(TabSelect { entity: other_entity });
+            if let Some(idx) = tab_order.0.iter().position(|&e| e == target) {
+                // Prefer next tab, fall back to previous
+                let next = tab_order.0.get(idx + 1).or_else(|| idx.checked_sub(1).and_then(|i| tab_order.0.get(i)));
+                if let Some(&entity) = next {
+                    commands.trigger(TabSelect { entity });
+                }
             }
         }
     }
