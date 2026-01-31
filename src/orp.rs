@@ -8,7 +8,8 @@ use bevy::prelude::*;
 use bevy::sprite::Anchor;
 
 use crate::fonts::FontsStore;
-use crate::reader::{ActiveTab, TabFontSettings, WordsManager, FONT_SIZE_DEFAULT};
+use crate::reader::FONT_SIZE_DEFAULT;
+use crate::tabs::{ActiveTab, TabFontSettings, WordsManager};
 
 const CHAR_WIDTH_RATIO: f32 = 0.6;
 

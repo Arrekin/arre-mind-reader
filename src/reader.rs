@@ -1,14 +1,14 @@
 //! Reader plugin - orchestrates the reading experience.
 //!
 //! Manages reading state transitions and timing.
-//! for input handling, ORP display, and timing calculations.
 
 use std::time::Duration;
 use bevy::prelude::*;
 
 use crate::input::InputPlugin;
 use crate::orp::OrpPlugin;
-use crate::text::Word;
+use crate::playback::PlaybackPlugin;
+use crate::tabs::{ActiveTab, TabWpm, WordsManager, TabsPlugin};
 
 pub const WPM_DEFAULT: u32 = 300;
 pub const WPM_MIN: u32 = 100;
@@ -21,7 +21,7 @@ impl Plugin for ReaderPlugin {
     fn build(&self, app: &mut App) {
         app.init_state::<ReadingState>()
             .init_resource::<ReadingTimer>()
-            .add_plugins((OrpPlugin, InputPlugin))
+            .add_plugins((OrpPlugin, InputPlugin, PlaybackPlugin, TabsPlugin))
             .add_systems(Update, ReadingState::tick.run_if(in_state(ReadingState::Playing)))
             .add_systems(OnEnter(ReadingState::Playing), ReadingState::on_start_playing)
             ;
@@ -75,35 +75,4 @@ impl ReadingState {
 #[derive(Resource, Default)]
 pub struct ReadingTimer {
     pub timer: Timer,
-}
-
-
-// ============================================================================
-// Tab Components
-// ============================================================================
-
-#[derive(Component)]
-#[component(storage = "SparseSet")]
-pub struct ActiveTab;
-
-#[derive(Component)]
-pub struct TabMarker;
-
-#[derive(Component)]
-pub struct TabFontSettings {
-    pub font_name: String,
-    pub font_handle: Handle<Font>,
-    pub font_size: f32,
-}
-
-#[derive(Component)]
-pub struct TabWpm(pub u32);
-
-#[derive(Component)]
-pub struct TabFilePath(pub std::path::PathBuf);
-
-#[derive(Component)]
-pub struct WordsManager {
-    pub words: Vec<Word>,
-    pub current_index: usize,
 }

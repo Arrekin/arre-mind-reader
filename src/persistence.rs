@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 use crate::fonts::FontsStore;
-use crate::reader::{
+use crate::tabs::{
     ActiveTab, TabFilePath, TabFontSettings, TabMarker, TabWpm, WordsManager,
 };
 use crate::text::Word;

@@ -10,7 +10,9 @@ mod fonts;
 mod input;
 mod orp;
 mod persistence;
+mod playback;
 mod reader;
+mod tabs;
 mod text;
 mod ui;
 

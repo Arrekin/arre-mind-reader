@@ -4,9 +4,8 @@
 
 use bevy::prelude::*;
 
-use crate::reader::{ActiveTab, ReadingState, TabWpm, WordsManager, WPM_MIN, WPM_MAX, WPM_STEP};
-
-const WORD_SKIP_AMOUNT: usize = 5;
+use crate::playback::PlaybackCommand;
+use crate::reader::WPM_STEP;
 
 pub struct InputPlugin;
 impl Plugin for InputPlugin {
@@ -19,48 +18,34 @@ impl Plugin for InputPlugin {
 
 fn handle_input(
     keyboard: Res<ButtonInput<KeyCode>>,
-    current_state: Res<State<ReadingState>>,
-    mut next_state: ResMut<NextState<ReadingState>>,
-    mut active_tabs: Query<(&mut TabWpm, &mut WordsManager), With<ActiveTab>>,
+    mut playback_cmds: MessageWriter<PlaybackCommand>,
 ) {
     // Space: toggle play/pause
     if keyboard.just_pressed(KeyCode::Space) {
-        match current_state.get() {
-            ReadingState::Idle | ReadingState::Paused => {
-                next_state.set(ReadingState::Playing);
-            }
-            ReadingState::Playing => {
-                next_state.set(ReadingState::Paused);
-            }
-        }
+        playback_cmds.write(PlaybackCommand::TogglePlayPause);
     }
     
     // Escape: stop
     if keyboard.just_pressed(KeyCode::Escape) {
-        next_state.set(ReadingState::Idle);
+        playback_cmds.write(PlaybackCommand::Stop);
     }
-    
-    let Ok((mut tab_wpm, mut words_mgr)) = active_tabs.single_mut() else { return };
     
     // R: restart
     if keyboard.just_pressed(KeyCode::KeyR) {
-        words_mgr.current_index = 0;
+        playback_cmds.write(PlaybackCommand::Restart);
     }
-    
-    let word_count = words_mgr.words.len();
     
     // Arrow keys: navigation and WPM
     if keyboard.just_pressed(KeyCode::ArrowLeft) {
-        words_mgr.current_index = words_mgr.current_index.saturating_sub(WORD_SKIP_AMOUNT);
+        playback_cmds.write(PlaybackCommand::skip_backward());
     }
     if keyboard.just_pressed(KeyCode::ArrowRight) {
-        words_mgr.current_index = (words_mgr.current_index + WORD_SKIP_AMOUNT)
-            .min(word_count.saturating_sub(1));
+        playback_cmds.write(PlaybackCommand::skip_forward());
     }
     if keyboard.just_pressed(KeyCode::ArrowUp) {
-        tab_wpm.0 = (tab_wpm.0 + WPM_STEP).min(WPM_MAX);
+        playback_cmds.write(PlaybackCommand::AdjustWpm(WPM_STEP as i32));
     }
     if keyboard.just_pressed(KeyCode::ArrowDown) {
-        tab_wpm.0 = tab_wpm.0.saturating_sub(WPM_STEP).max(WPM_MIN);
+        playback_cmds.write(PlaybackCommand::AdjustWpm(-(WPM_STEP as i32)));
     }
 }

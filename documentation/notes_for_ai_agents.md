@@ -19,14 +19,25 @@ Arre Mind Reader is a speed-reading application built with Bevy 0.18 and Rust. I
 Each file follows: imports → Plugin definition → constants → types/components → systems
 
 - `main.rs` - App entry point, plugin registration
-- `reader.rs` - `ReaderPlugin` orchestrates sub-plugins (`OrpPlugin`, `InputPlugin`), manages reading state transitions and timing tick. Contains tab components (`TabMarker`, `TabFontSettings`, `TabWpm`, `TabFilePath`, `WordsManager`), `ActiveTab` marker component, `ReadingState`, and WPM/font constants
+- `reader.rs` - `ReaderPlugin` orchestrates sub-plugins, manages `ReadingState` transitions and timing tick. Contains WPM/font constants
+- `tabs.rs` - `TabsPlugin` with tab components (`TabMarker`, `TabFontSettings`, `TabWpm`, `TabFilePath`, `WordsManager`, `ActiveTab`), entity events (`TabSelect`, `TabClose`, `TabCreate`), and observers for reactive tab management
+- `playback.rs` - `PlaybackPlugin` with `PlaybackCommand` message enum (Play/Pause/Stop/etc.) and centralized playback state processor
 - `orp.rs` - `OrpPlugin` with display entity setup, word display updates (hardcoded red highlight)
-- `timing.rs` - `ReadingTimer` resource only (timing logic moved to `Word::display_duration_ms()`)
-- `input.rs` - `InputPlugin` with keyboard handling (play/pause, navigation, WPM)
-- `text_parser.rs` - `TextParser` trait and `TxtParser` implementation (use `TxtParser.parse()` directly)
+- `input.rs` - `InputPlugin` emits `PlaybackCommand` messages from keyboard input
+- `text.rs` - `TextParser` trait, `TxtParser` implementation, `Word` struct with ORP/duration methods
 - `fonts.rs` - `FontsPlugin` with `FontsStore` resource, scans assets/fonts at startup
 - `persistence.rs` - `PersistencePlugin` with RON format save/load, spawns tab entities on load
-- `ui.rs` - `UiPlugin` with tab bar, controls, new tab dialog, async file loading, `spawn_tab()` helper
+- `ui/` - UI module directory:
+  - `mod.rs` - `UiPlugin` registration
+  - `tab_bar.rs` - Tab strip rendering, emits `TabSelect`/`TabClose` events
+  - `controls.rs` - Playback controls, progress, WPM slider, font selector
+  - `dialogs.rs` - New tab dialog, async file loading, emits `TabCreate` events
+
+## ECS Event Patterns
+- **Tab events** use `EntityEvent` pattern with separate structs (`TabSelect`, `TabClose`) for entity-targeted events
+- **Playback** uses `Message` enum (`PlaybackCommand`) for buffered events processed by central system
+- **UI emits events/commands** rather than directly mutating state - observers and systems react to events
+- Bevy 0.18 uses `Message`/`MessageWriter`/`MessageReader` for buffered events (not `Event`/`EventWriter`/`EventReader`)
 
 ## Dependencies
 - `bevy` 0.18 - Game engine
