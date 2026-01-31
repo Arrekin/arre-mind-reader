@@ -115,9 +115,9 @@ fn setup_orp_display(
 
 fn update_word_display(
     active_tabs: Query<(&TabFontSettings, &WordsManager), With<ActiveTab>>,
-    mut left_texts: Query<(&mut Text2d, &mut TextFont), (With<LeftTextMarker>, Without<CenterTextMarker>, Without<RightTextMarker>)>,
-    mut center_texts: Query<(&mut Text2d, &mut TextFont), (With<CenterTextMarker>, Without<LeftTextMarker>, Without<RightTextMarker>)>,
-    mut right_texts: Query<(&mut Text2d, &mut TextFont), (With<RightTextMarker>, Without<LeftTextMarker>, Without<CenterTextMarker>)>,
+    left_texts: Single<(&mut Text2d, &mut TextFont), (With<LeftTextMarker>, Without<CenterTextMarker>, Without<RightTextMarker>)>,
+    center_texts: Single<(&mut Text2d, &mut TextFont), (With<CenterTextMarker>, Without<LeftTextMarker>, Without<RightTextMarker>)>,
+    right_texts: Single<(&mut Text2d, &mut TextFont), (With<RightTextMarker>, Without<LeftTextMarker>, Without<CenterTextMarker>)>,
 ) {
     let Ok((font_settings, words_mgr)) = active_tabs.single() else { return };
     if words_mgr.words.is_empty() {
@@ -136,21 +136,18 @@ fn update_word_display(
     let font_handle = font_settings.font_handle.clone();
     let font_size = font_settings.font_size;
     
-    if let Ok((mut text, mut font)) = left_texts.single_mut() {
-        **text = left;
-        font.font_size = font_size;
-        font.font = font_handle.clone();
-    }
+    let (mut text, mut font) = left_texts.into_inner();
+    **text = left;
+    font.font_size = font_size;
+    font.font = font_handle.clone();
     
-    if let Ok((mut text, mut font)) = center_texts.single_mut() {
-        **text = center;
-        font.font_size = font_size;
-        font.font = font_handle.clone();
-    }
+    let (mut text, mut font) = center_texts.into_inner();
+    **text = center;
+    font.font_size = font_size;
+    font.font = font_handle.clone();
     
-    if let Ok((mut text, mut font)) = right_texts.single_mut() {
-        **text = right;
-        font.font_size = font_size;
-        font.font = font_handle;
-    }
+    let (mut text, mut font) = right_texts.into_inner();
+    **text = right;
+    font.font_size = font_size;
+    font.font = font_handle;
 }

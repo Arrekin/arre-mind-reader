@@ -39,9 +39,9 @@ pub enum ReadingState {
 impl ReadingState {
     fn on_start_playing(
         mut timer: ResMut<ReadingTimer>,
-        active_tabs: Query<(&TabWpm, &WordsManager), With<ActiveTab>>,
+        active_tab: Single<(&TabWpm, &WordsManager), With<ActiveTab>>,
     ) {
-        let Ok((tab_wpm, words_mgr)) = active_tabs.single() else { return };
+        let (tab_wpm, words_mgr) = active_tab.into_inner();
         if !words_mgr.words.is_empty() {
             let word = &words_mgr.words[words_mgr.current_index];
             let delay = Duration::from_millis(word.display_duration_ms(tab_wpm.0));
@@ -52,10 +52,10 @@ impl ReadingState {
     fn tick(
         time: Res<Time>,
         mut timer: ResMut<ReadingTimer>,
-        mut active_tabs: Query<(&TabWpm, &mut WordsManager), With<ActiveTab>>,
+        active_tab: Single<(&TabWpm, &mut WordsManager), With<ActiveTab>>,
         mut next_state: ResMut<NextState<ReadingState>>,
     ) {
-        let Ok((tab_wpm, mut words_mgr)) = active_tabs.single_mut() else { return };
+        let (tab_wpm, mut words_mgr) = active_tab.into_inner();
         
         timer.timer.tick(time.delta());
         
