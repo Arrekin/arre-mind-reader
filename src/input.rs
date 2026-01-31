@@ -4,9 +4,9 @@
 
 use bevy::prelude::*;
 
-use crate::state::constants::*;
-use crate::state::{ActiveTab};
-use crate::reader::{ReadingState, TabWpm, WordsManager};
+use crate::reader::{ActiveTab, ReadingState, TabWpm, WordsManager, WPM_MIN, WPM_MAX, WPM_STEP};
+
+const WORD_SKIP_AMOUNT: usize = 5;
 
 pub struct InputPlugin;
 impl Plugin for InputPlugin {
@@ -21,8 +21,7 @@ fn handle_input(
     keyboard: Res<ButtonInput<KeyCode>>,
     current_state: Res<State<ReadingState>>,
     mut next_state: ResMut<NextState<ReadingState>>,
-    active_tab: Res<ActiveTab>,
-    mut tabs: Query<(&mut TabWpm, &mut WordsManager)>,
+    mut active_tabs: Query<(&mut TabWpm, &mut WordsManager), With<ActiveTab>>,
 ) {
     // Space: toggle play/pause
     if keyboard.just_pressed(KeyCode::Space) {
@@ -41,8 +40,7 @@ fn handle_input(
         next_state.set(ReadingState::Idle);
     }
     
-    let Some(entity) = active_tab.entity else { return };
-    let Ok((mut tab_wpm, mut words_mgr)) = tabs.get_mut(entity) else { return };
+    let Ok((mut tab_wpm, mut words_mgr)) = active_tabs.single_mut() else { return };
     
     // R: restart
     if keyboard.just_pressed(KeyCode::KeyR) {

@@ -9,11 +9,10 @@ use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 use std::path::PathBuf;
 
 use crate::fonts::FontsStore;
-use crate::state::constants::*;
-use crate::state::{
-    ActiveTab, 
+use crate::reader::{
+    ActiveTab, ReadingState, TabFilePath, TabFontSettings, TabMarker, TabWpm, WordsManager,
+    WPM_DEFAULT, WPM_MIN, WPM_MAX, WPM_STEP, FONT_SIZE_DEFAULT,
 };
-use crate::reader::{ReadingState, TabFilePath, TabFontSettings, TabId, TabMarker, TabWpm,WordsManager};
 use crate::text::{TextParser, TxtParser, Word};
 
 pub struct UiPlugin;
@@ -55,10 +54,9 @@ pub struct FileLoadResult {
 fn tab_bar_system(
     mut commands: Commands,
     mut contexts: EguiContexts,
-    mut active_tab: ResMut<ActiveTab>,
     mut dialog: ResMut<NewTabDialog>,
     mut next_state: ResMut<NextState<ReadingState>>,
-    tabs: Query<(Entity, &TabMarker, &Name)>,
+    tabs: Query<(Entity, &Name, Has<ActiveTab>), With<TabMarker>>,
 ) {
     let Ok(ctx) = contexts.ctx_mut() else { return };
     
@@ -66,25 +64,25 @@ fn tab_bar_system(
     let mut tab_to_select: Option<Entity> = None;
     let mut open_dialog = false;
     
-    let tab_info: Vec<(Entity, TabId, Name, bool)> = tabs.iter()
-        .map(|(e, marker, name)| (e, marker.id, name.clone(), active_tab.entity == Some(e)))
+    let tab_info: Vec<(Entity, Name, bool)> = tabs.iter()
+        .map(|(e, name, is_active)| (e, name.clone(), is_active))
         .collect();
     
     egui::TopBottomPanel::top("tabs").show(ctx, |ui| {
         ui.horizontal(|ui| {
-            for (entity, _id, name, is_active) in tab_info {
-                let label = if is_active {
-                    egui::RichText::new(name).strong()
+            for (entity, name, is_active) in &tab_info {
+                let label = if *is_active {
+                    egui::RichText::new(name.as_str()).strong()
                 } else {
-                    egui::RichText::new(name)
+                    egui::RichText::new(name.as_str())
                 };
                 
                 ui.horizontal(|ui| {
-                    if ui.selectable_label(is_active, label).clicked() {
-                        tab_to_select = Some(entity);
+                    if ui.selectable_label(*is_active, label).clicked() {
+                        tab_to_select = Some(*entity);
                     }
                     if ui.small_button("×").clicked() {
-                        tab_to_close = Some(entity);
+                        tab_to_close = Some(*entity);
                     }
                 });
                 ui.separator();
@@ -98,17 +96,23 @@ fn tab_bar_system(
     
     // Apply mutations after UI
     if let Some(entity) = tab_to_select {
-        active_tab.entity = Some(entity);
+        // Remove ActiveTab from all tabs, add to selected
+        for (e, _, was_active) in &tab_info {
+            if *was_active {
+                commands.entity(*e).remove::<ActiveTab>();
+            }
+        }
+        commands.entity(entity).insert(ActiveTab);
         next_state.set(ReadingState::Idle);
     }
     if let Some(entity) = tab_to_close {
+        let was_active = tab_info.iter().find(|(e, _, _)| *e == entity).is_some_and(|(_, _, a)| *a);
         commands.entity(entity).despawn();
-        if active_tab.entity == Some(entity) {
-            // Select another tab or none
-            active_tab.entity = tabs.iter()
-                .filter(|(e, _, _)| *e != entity)
-                .map(|(e, _, _)| e)
-                .next();
+        if was_active {
+            // Select another tab
+            if let Some((other_entity, _, _)) = tab_info.iter().find(|(e, _, _)| *e != entity) {
+                commands.entity(*other_entity).insert(ActiveTab);
+            }
         }
         next_state.set(ReadingState::Idle);
     }
@@ -120,18 +124,16 @@ fn tab_bar_system(
 
 fn controls_system(
     mut contexts: EguiContexts,
-    active_tab: Res<ActiveTab>,
     current_state: Res<State<ReadingState>>,
     mut next_state: ResMut<NextState<ReadingState>>,
     fonts: Res<FontsStore>,
-    mut tabs: Query<(&mut TabWpm, &mut TabFontSettings, &WordsManager)>,
+    mut active_tabs: Query<(&mut TabWpm, &mut TabFontSettings, &WordsManager), With<ActiveTab>>,
 ) {
     let Ok(ctx) = contexts.ctx_mut() else { return };
     
     egui::TopBottomPanel::bottom("controls").show(ctx, |ui| {
         ui.horizontal(|ui| {
-            if let Some(entity) = active_tab.entity {
-                if let Ok((mut tab_wpm, mut font_settings, words_mgr)) = tabs.get_mut(entity) {
+            if let Ok((mut tab_wpm, mut font_settings, words_mgr)) = active_tabs.single_mut() {
                     let btn_text = match current_state.get() {
                         ReadingState::Playing => "⏸ Pause",
                         _ => "▶ Play",
@@ -177,7 +179,6 @@ fn controls_system(
                         });
                     
                     ui.separator();
-                }
             } else {
                 ui.label("No tab open. Click '+ New' to add text.");
             }
@@ -197,11 +198,11 @@ fn new_tab_dialog_system(
     mut commands: Commands,
     mut contexts: EguiContexts,
     mut dialog: ResMut<NewTabDialog>,
-    mut active_tab: ResMut<ActiveTab>,
     mut next_state: ResMut<NextState<ReadingState>>,
     mut pending_load: ResMut<PendingFileLoad>,
     fonts: Res<FontsStore>,
-    tabs: Query<&TabMarker>,
+    tabs: Query<Entity, With<TabMarker>>,
+    active_tabs: Query<Entity, With<ActiveTab>>,
 ) {
     if !dialog.open {
         return;
@@ -265,8 +266,11 @@ fn new_tab_dialog_system(
                     let words = TxtParser.parse(&dialog.text_input);
                     let tab_count = tabs.iter().count();
                     let name = format!("Text {}", tab_count + 1);
-                    let entity = spawn_tab(&mut commands, &mut active_tab, &fonts, name, None, words);
-                    active_tab.entity = Some(entity);
+                    // Remove ActiveTab from current
+                    if let Ok(old_active) = active_tabs.single() {
+                        commands.entity(old_active).remove::<ActiveTab>();
+                    }
+                    spawn_tab(&mut commands, &fonts, name, None, words);
                     dialog.open = false;
                     dialog.text_input.clear();
                     next_state.set(ReadingState::Idle);
@@ -283,24 +287,26 @@ fn new_tab_dialog_system(
 fn poll_file_load_task(
     mut commands: Commands,
     mut pending_load: ResMut<PendingFileLoad>,
-    mut active_tab: ResMut<ActiveTab>,
     mut dialog: ResMut<NewTabDialog>,
     mut next_state: ResMut<NextState<ReadingState>>,
     fonts: Res<FontsStore>,
+    active_tabs: Query<Entity, With<ActiveTab>>,
 ) {
     let Some(task) = &mut pending_load.task else { return };
     
     if let Some(result) = block_on(poll_once(task)) {
         if let Some(file_result) = result {
-            let entity = spawn_tab(
+            // Remove ActiveTab from current
+            if let Ok(old_active) = active_tabs.single() {
+                commands.entity(old_active).remove::<ActiveTab>();
+            }
+            spawn_tab(
                 &mut commands,
-                &mut active_tab,
                 &fonts,
                 file_result.name,
                 Some(file_result.path),
                 file_result.words,
             );
-            active_tab.entity = Some(entity);
             dialog.open = false;
             next_state.set(ReadingState::Idle);
         }
@@ -310,19 +316,18 @@ fn poll_file_load_task(
 
 pub fn spawn_tab(
     commands: &mut Commands,
-    active_tab: &mut ActiveTab,
     fonts: &FontsStore,
     name: String,
     file_path: Option<PathBuf>,
     words: Vec<Word>,
 ) -> Entity {
-    let id = active_tab.allocate_id();
     let default_font = fonts.default_font();
     let font_name = default_font.map(|f| f.name.clone()).unwrap_or_default();
     let font_handle = default_font.map(|f| f.handle.clone()).unwrap_or_default();
     
     let mut entity_commands = commands.spawn((
-        TabMarker { id },
+        TabMarker,
+        ActiveTab,
         Name::new(name),
         TabFontSettings {
             font_name,

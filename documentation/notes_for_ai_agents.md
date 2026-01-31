@@ -12,16 +12,14 @@ Arre Mind Reader is a speed-reading application built with Bevy 0.18 and Rust. I
 ## Key Concepts
 - **ORP (Optical Recognition Point):** The letter the eye fixates on, positioned at screen center (0,0). Research shows slightly left-of-center is optimal.
 - **Split-text rendering:** Words split into left/center/right using `Anchor::CenterRight` and `Anchor::CenterLeft` to grow outward from center.
-- **ECS Tab Modeling:** Each tab is an entity with components: `TabMarker`, `TabName`, `TabFontSettings`, `TabWpm`, `WordsManager`, optional `TabFilePath`.
+- **ECS Tab Modeling:** Each tab is an entity with components: `TabMarker`, `Name`, `TabFontSettings`, `TabWpm`, `WordsManager`, optional `TabFilePath`, and `ActiveTab` marker for the currently active tab.
 - **Per-tab settings:** Font and WPM are stored per-tab, not globally. Highlight color is hardcoded red.
-- **Stable Tab IDs:** Tabs use `TabId` (u64) in `TabMarker` for reliable identification across save/load.
 
 ## Module Structure
 Each file follows: imports → Plugin definition → constants → types/components → systems
 
 - `main.rs` - App entry point, plugin registration
-- `state.rs` - Core types: `Word` (with `orp_index()` and `display_duration_ms()` methods), tab components (`TabMarker`, `TabName`, `TabFontSettings`, `TabWpm`, `TabFilePath`, `WordsManager`), `ActiveTab` resource, `ReadingState`, `constants` module
-- `reader.rs` - `ReaderPlugin` orchestrates sub-plugins (`OrpPlugin`, `InputPlugin`), manages reading state transitions and timing tick
+- `reader.rs` - `ReaderPlugin` orchestrates sub-plugins (`OrpPlugin`, `InputPlugin`), manages reading state transitions and timing tick. Contains tab components (`TabMarker`, `TabFontSettings`, `TabWpm`, `TabFilePath`, `WordsManager`), `ActiveTab` marker component, `ReadingState`, and WPM/font constants
 - `orp.rs` - `OrpPlugin` with display entity setup, word display updates (hardcoded red highlight)
 - `timing.rs` - `ReadingTimer` resource only (timing logic moved to `Word::display_duration_ms()`)
 - `input.rs` - `InputPlugin` with keyboard handling (play/pause, navigation, WPM)

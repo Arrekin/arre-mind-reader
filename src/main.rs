@@ -11,7 +11,6 @@ mod input;
 mod orp;
 mod persistence;
 mod reader;
-mod state;
 mod text;
 mod ui;
 

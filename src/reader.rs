@@ -8,14 +8,18 @@ use bevy::prelude::*;
 
 use crate::input::InputPlugin;
 use crate::orp::OrpPlugin;
-use crate::state::{ActiveTab};
 use crate::text::Word;
+
+pub const WPM_DEFAULT: u32 = 300;
+pub const WPM_MIN: u32 = 100;
+pub const WPM_MAX: u32 = 1000;
+pub const WPM_STEP: u32 = 50;
+pub const FONT_SIZE_DEFAULT: f32 = 48.0;
 
 pub struct ReaderPlugin;
 impl Plugin for ReaderPlugin {
     fn build(&self, app: &mut App) {
         app.init_state::<ReadingState>()
-            .init_resource::<ActiveTab>()
             .init_resource::<ReadingTimer>()
             .add_plugins((OrpPlugin, InputPlugin))
             .add_systems(Update, ReadingState::tick.run_if(in_state(ReadingState::Playing)))
@@ -35,11 +39,9 @@ pub enum ReadingState {
 impl ReadingState {
     fn on_start_playing(
         mut timer: ResMut<ReadingTimer>,
-        active_tab: Res<ActiveTab>,
-        tabs: Query<(&TabWpm, &WordsManager)>,
+        active_tabs: Query<(&TabWpm, &WordsManager), With<ActiveTab>>,
     ) {
-        let Some(entity) = active_tab.entity else { return };
-        let Ok((tab_wpm, words_mgr)) = tabs.get(entity) else { return };
+        let Ok((tab_wpm, words_mgr)) = active_tabs.single() else { return };
         if !words_mgr.words.is_empty() {
             let word = &words_mgr.words[words_mgr.current_index];
             let delay = Duration::from_millis(word.display_duration_ms(tab_wpm.0));
@@ -50,12 +52,10 @@ impl ReadingState {
     fn tick(
         time: Res<Time>,
         mut timer: ResMut<ReadingTimer>,
-        active_tab: Res<ActiveTab>,
-        mut tabs: Query<(&TabWpm, &mut WordsManager)>,
+        mut active_tabs: Query<(&TabWpm, &mut WordsManager), With<ActiveTab>>,
         mut next_state: ResMut<NextState<ReadingState>>,
     ) {
-        let Some(entity) = active_tab.entity else { return };
-        let Ok((tab_wpm, mut words_mgr)) = tabs.get_mut(entity) else { return };
+        let Ok((tab_wpm, mut words_mgr)) = active_tabs.single_mut() else { return };
         
         timer.timer.tick(time.delta());
         
@@ -82,12 +82,12 @@ pub struct ReadingTimer {
 // Tab Components
 // ============================================================================
 
-pub type TabId = u64;
+#[derive(Component)]
+#[component(storage = "SparseSet")]
+pub struct ActiveTab;
 
 #[derive(Component)]
-pub struct TabMarker {
-    pub id: TabId,
-}
+pub struct TabMarker;
 
 #[derive(Component)]
 pub struct TabFontSettings {

@@ -8,9 +8,9 @@ use bevy::prelude::*;
 use bevy::sprite::Anchor;
 
 use crate::fonts::FontsStore;
-use crate::state::constants::*;
-use crate::state::{ActiveTab};
-use crate::reader::{TabFontSettings, WordsManager};
+use crate::reader::{ActiveTab, TabFontSettings, WordsManager, FONT_SIZE_DEFAULT};
+
+const CHAR_WIDTH_RATIO: f32 = 0.6;
 
 pub struct OrpPlugin;
 impl Plugin for OrpPlugin {
@@ -114,14 +114,12 @@ fn setup_orp_display(
 }
 
 fn update_word_display(
-    active_tab: Res<ActiveTab>,
-    tabs: Query<(&TabFontSettings, &WordsManager)>,
+    active_tabs: Query<(&TabFontSettings, &WordsManager), With<ActiveTab>>,
     mut left_texts: Query<(&mut Text2d, &mut TextFont), (With<LeftTextMarker>, Without<CenterTextMarker>, Without<RightTextMarker>)>,
     mut center_texts: Query<(&mut Text2d, &mut TextFont), (With<CenterTextMarker>, Without<LeftTextMarker>, Without<RightTextMarker>)>,
     mut right_texts: Query<(&mut Text2d, &mut TextFont), (With<RightTextMarker>, Without<LeftTextMarker>, Without<CenterTextMarker>)>,
 ) {
-    let Some(entity) = active_tab.entity else { return };
-    let Ok((font_settings, words_mgr)) = tabs.get(entity) else { return };
+    let Ok((font_settings, words_mgr)) = active_tabs.single() else { return };
     if words_mgr.words.is_empty() {
         return;
     }

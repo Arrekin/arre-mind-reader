@@ -8,9 +8,8 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 use crate::fonts::FontsStore;
-use crate::state::ActiveTab;
 use crate::reader::{
-    TabFilePath, TabFontSettings, TabId, TabMarker, TabWpm, WordsManager,
+    ActiveTab, TabFilePath, TabFontSettings, TabMarker, TabWpm, WordsManager,
 };
 use crate::text::Word;
 
@@ -33,7 +32,6 @@ const SAVE_INTERVAL_SECS: f32 = 5.0;
 
 #[derive(Serialize, Deserialize)]
 struct SavedTab {
-    id: TabId,
     name: String,
     file_path: Option<PathBuf>,
     font_name: String,
@@ -41,13 +39,12 @@ struct SavedTab {
     wpm: u32,
     words: Vec<Word>,
     current_index: usize,
+    is_active: bool,
 }
 
 #[derive(Serialize, Deserialize, Default)]
 struct ProgramState {
     tabs: Vec<SavedTab>,
-    active_id: Option<TabId>,
-    next_id: TabId,
 }
 impl ProgramState {
     fn get_config_path() -> Option<PathBuf> {
@@ -126,22 +123,18 @@ impl Default for TabSaveTimer {
 
 fn spawn_tabs_from_program_state(
     mut commands: Commands,
-    mut active_tab: ResMut<ActiveTab>,
     fonts: Res<FontsStore>,
 ) {
     let program_state = ProgramState::load();
-
-    active_tab.set_next_id(program_state.next_id);
-    
-    let mut active_entity = None;
     let total_tabs = program_state.tabs.len();
+    
     for tab in program_state.tabs {
         let font_data = fonts.get_by_name(&tab.font_name).or_else(|| fonts.default_font());
         let font_name = font_data.map(|f| f.name.clone()).unwrap_or_default();
         let font_handle = font_data.map(|f| f.handle.clone()).unwrap_or_default();
         
         let mut entity_commands = commands.spawn((
-            TabMarker { id: tab.id },
+            TabMarker,
             Name::new(tab.name),
             TabFontSettings {
                 font_name,
@@ -158,61 +151,45 @@ fn spawn_tabs_from_program_state(
         if let Some(path) = tab.file_path {
             entity_commands.insert(TabFilePath(path));
         }
-        
-        let entity = entity_commands.id();
-        if program_state.active_id == Some(tab.id) {
-            active_entity = Some(entity);
+        if tab.is_active {
+            entity_commands.insert(ActiveTab);
         }
     }
     
-    active_tab.entity = active_entity;
     info!("Restored {} tabs from saved state", total_tabs);
 }
 
 fn persist_program_state(
     time: Res<Time>,
     mut save_timer: ResMut<TabSaveTimer>,
-    active_tab: Res<ActiveTab>,
     app_exit_events: MessageReader<AppExit>,
     tabs: Query<(
-        Entity,
-        &TabMarker,
         &Name,
         &TabFontSettings,
         &TabWpm,
         &WordsManager,
         Option<&TabFilePath>,
-    )>,
+        Has<ActiveTab>,
+    ), With<TabMarker>>,
 ) {
     save_timer.timer.tick(time.delta());
     if !save_timer.timer.just_finished() && app_exit_events.is_empty() { return; }
 
-    // Collect data for the save
-    let mut saved_tabs = Vec::new();
-    let mut active_id = None;
-    let mut max_id: TabId = 0;
+    let saved_tabs: Vec<SavedTab> = tabs.iter()
+        .map(|(name, font_settings, wpm, words_mgr, file_path, is_active)| {
+            SavedTab {
+                name: name.to_string(),
+                file_path: file_path.map(|fp| fp.0.clone()),
+                font_name: font_settings.font_name.clone(),
+                font_size: font_settings.font_size,
+                wpm: wpm.0,
+                words: words_mgr.words.clone(),
+                current_index: words_mgr.current_index,
+                is_active,
+            }
+        })
+        .collect();
     
-    for (entity, marker, name, font_settings, wpm, words_mgr, file_path) in tabs.iter() {
-        max_id = max_id.max(marker.id);
-        if active_tab.entity == Some(entity) {
-            active_id = Some(marker.id);
-        }
-        saved_tabs.push(SavedTab {
-            id: marker.id,
-            name: name.to_string(),
-            file_path: file_path.map(|fp| fp.0.clone()),
-            font_name: font_settings.font_name.clone(),
-            font_size: font_settings.font_size,
-            wpm: wpm.0,
-            words: words_mgr.words.clone(),
-            current_index: words_mgr.current_index,
-        });
-    }
-    
-    ProgramState {
-        tabs: saved_tabs,
-        active_id,
-        next_id: max_id + 1,
-    }.save();
+    ProgramState { tabs: saved_tabs }.save();
     info!("The program state was saved");
 }
