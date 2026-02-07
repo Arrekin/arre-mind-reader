@@ -7,9 +7,8 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-use crate::fonts::FontsStore;
 use crate::tabs::{
-    ActiveTab, TabFilePath, TabFontSettings, TabMarker, TabWpm, WordsManager,
+    ActiveTab, TabCreateRequest, TabFilePath, TabFontSettings, TabMarker, TabWpm, WordsManager,
 };
 use crate::text::Word;
 
@@ -121,39 +120,22 @@ impl Default for TabSaveTimer {
 // Systems
 // ============================================================================
 
-fn spawn_tabs_from_program_state(
-    mut commands: Commands,
-    fonts: Res<FontsStore>,
-) {
+fn spawn_tabs_from_program_state(mut commands: Commands) {
     let program_state = ProgramState::load();
     let total_tabs = program_state.tabs.len();
     
     for tab in program_state.tabs {
-        let font_data = fonts.get_by_name(&tab.font_name).or_else(|| fonts.default_font());
-        let font_name = font_data.map(|f| f.name.clone()).unwrap_or_default();
-        let font_handle = font_data.map(|f| f.handle.clone()).unwrap_or_default();
-        
-        let mut entity_commands = commands.spawn((
-            TabMarker,
-            Name::new(tab.name),
-            TabFontSettings {
-                font_name,
-                font_handle,
-                font_size: tab.font_size,
-            },
-            TabWpm(tab.wpm),
-            WordsManager {
-                words: tab.words,
-                current_index: tab.current_index,
-            },
-        ));
+        let mut request = TabCreateRequest::new(tab.name, tab.words)
+            .with_font(tab.font_name, tab.font_size)
+            .with_wpm(tab.wpm)
+            .with_current_index(tab.current_index)
+            .with_active(tab.is_active);
         
         if let Some(path) = tab.file_path {
-            entity_commands.insert(TabFilePath(path));
+            request = request.with_file_path(path);
         }
-        if tab.is_active {
-            entity_commands.insert(ActiveTab);
-        }
+        
+        commands.trigger(request);
     }
     
     info!("Restored {} tabs from saved state", total_tabs);

@@ -7,8 +7,8 @@ use bevy::tasks::{block_on, poll_once, AsyncComputeTaskPool, Task};
 use bevy_egui::{EguiContexts, egui};
 use std::path::PathBuf;
 
-use crate::tabs::{TabCreate, TabMarker};
-use crate::text::{TxtParser, TextParser, Word};
+use crate::tabs::{TabCreateRequest, TabMarker};
+use crate::text::{TxtParser, TextParser, Word, get_parser_for_path};
 
 // ============================================================================
 // Resources
@@ -65,12 +65,13 @@ pub fn new_tab_dialog_system(
                             .await?;
                         
                         let path = file_handle.path().to_path_buf();
+                        let parser = get_parser_for_path(&path)?;
                         let content = std::fs::read_to_string(&path).ok()?;
                         let name = path.file_stem()
                             .and_then(|s| s.to_str())
                             .unwrap_or("Untitled")
                             .to_string();
-                        let words = TxtParser.parse(&content);
+                        let words = parser.parse(&content);
                         
                         Some(FileLoadResult { path, name, words })
                     });
@@ -105,11 +106,7 @@ pub fn new_tab_dialog_system(
                     let tab_count = tabs.iter().count();
                     let name = format!("Text {}", tab_count + 1);
                     
-                    commands.trigger(TabCreate {
-                        name,
-                        file_path: None,
-                        words,
-                    });
+                        commands.trigger(TabCreateRequest::new(name,words));
                     
                     dialog.open = false;
                     dialog.text_input.clear();
@@ -132,11 +129,7 @@ pub fn poll_file_load_task(
     
     if let Some(result) = block_on(poll_once(task)) {
         if let Some(file_result) = result {
-            commands.trigger(TabCreate {
-                name: file_result.name,
-                file_path: Some(file_result.path),
-                words: file_result.words,
-            });
+            commands.trigger(TabCreateRequest::new(file_result.name, file_result.words).with_file_path(file_result.path));
             dialog.open = false;
         }
         pending_load.task = None;

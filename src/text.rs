@@ -50,7 +50,6 @@ impl Word {
 /// Trait for parsing text content into words. Implement for new file format support.
 pub trait TextParser {
     /// Returns true if this parser can handle the given file path (based on extension).
-    #[allow(dead_code)]
     fn can_parse(path: &Path) -> bool where Self: Sized;
     
     /// Parses the content string into a vector of Words with paragraph detection.
@@ -66,23 +65,23 @@ impl TextParser for TxtParser {
     }
     
     fn parse(&self, content: &str) -> Vec<Word> {
-        let mut words = Vec::new();
-        let mut is_paragraph_end = false;
+        let mut words: Vec<Word> = Vec::new();
         
         for line in content.lines() {
             let trimmed = line.trim();
             
             if trimmed.is_empty() {
-                is_paragraph_end = true;
+                if let Some(last) = words.last_mut() {
+                    last.is_paragraph_end = true;
+                }
                 continue;
             }
             
             for word_text in trimmed.split_whitespace() {
                 words.push(Word {
                     text: word_text.to_string(),
-                    is_paragraph_end,
+                    is_paragraph_end: false,
                 });
-                is_paragraph_end = false;
             }
         }
         
@@ -91,7 +90,6 @@ impl TextParser for TxtParser {
 }
 
 /// Returns an appropriate parser for the given file path, or None if unsupported.
-#[allow(dead_code)]
 pub fn get_parser_for_path(path: &Path) -> Option<Box<dyn TextParser>> {
     if TxtParser::can_parse(path) {
         return Some(Box::new(TxtParser));

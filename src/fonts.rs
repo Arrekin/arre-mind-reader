@@ -31,8 +31,6 @@ impl FontsStore {
     pub fn get_by_name(&self, name: &str) -> Option<&FontData> {
         self.fonts.iter().find(|f| f.name == name)
     }
-}
-impl FontsStore {
     fn load_fonts(
         mut fonts_store: ResMut<FontsStore>,
         asset_server: Res<AssetServer>,

@@ -20,18 +20,18 @@ Each file follows: imports → Plugin definition → constants → types/compone
 
 - `main.rs` - App entry point, plugin registration
 - `reader.rs` - `ReaderPlugin` orchestrates sub-plugins, manages `ReadingState` transitions and timing tick. Contains WPM/font constants
-- `tabs.rs` - `TabsPlugin` with tab components (`TabMarker`, `TabFontSettings`, `TabWpm`, `TabFilePath`, `WordsManager`, `ActiveTab`), entity events (`TabSelect`, `TabClose`, `TabCreate`), and observers for reactive tab management
-- `playback.rs` - `PlaybackPlugin` with `PlaybackCommand` message enum (Play/Pause/Stop/etc.) and centralized playback state processor
-- `orp.rs` - `OrpPlugin` with display entity setup, word display updates (hardcoded red highlight)
+- `tabs.rs` - `TabsPlugin` with tab components (`TabMarker`, `TabFontSettings`, `TabWpm`, `TabFilePath`, `WordsManager`, `ActiveTab`), entity events (`TabSelect`, `TabClose`), `TabCreateRequest` event with builder pattern (font/wpm/index/active fields with defaults), and observers for reactive tab management
+- `playback.rs` - `PlaybackPlugin` with `PlaybackCommand` message enum (Play/Pause/Stop/etc.) and `PlaybackCommand::process` system
+- `orp.rs` - `OrpPlugin` with display entity setup, word display updates with reactive font size positioning (hardcoded red highlight)
 - `input.rs` - `InputPlugin` emits `PlaybackCommand` messages from keyboard input
-- `text.rs` - `TextParser` trait, `TxtParser` implementation, `Word` struct with ORP/duration methods
+- `text.rs` - `TextParser` trait, `TxtParser` implementation, `get_parser_for_path()` registry function, `Word` struct with ORP/duration methods
 - `fonts.rs` - `FontsPlugin` with `FontsStore` resource, scans assets/fonts at startup
-- `persistence.rs` - `PersistencePlugin` with RON format save/load, spawns tab entities on load
+- `persistence.rs` - `PersistencePlugin` with RON format save/load, triggers `TabCreateRequest` events on load
 - `ui/` - UI module directory:
   - `mod.rs` - `UiPlugin` registration
   - `tab_bar.rs` - Tab strip rendering, emits `TabSelect`/`TabClose` events
   - `controls.rs` - Playback controls, progress, WPM slider, font selector
-  - `dialogs.rs` - New tab dialog, async file loading, emits `TabCreate` events
+  - `dialogs.rs` - New tab dialog, async file loading with `get_parser_for_path()`, emits `TabCreateRequest` events
 
 ## ECS Event Patterns
 - **Tab events** use `EntityEvent` pattern with separate structs (`TabSelect`, `TabClose`) for entity-targeted events

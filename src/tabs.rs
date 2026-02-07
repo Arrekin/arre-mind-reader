@@ -16,7 +16,7 @@ impl Plugin for TabsPlugin {
             .init_resource::<TabOrder>()
             .add_observer(TabSelect::on_trigger)
             .add_observer(TabClose::on_trigger)
-            .add_observer(TabCreate::on_trigger)
+            .add_observer(TabCreateRequest::on_trigger)
             .add_observer(TabOrder::on_tab_added)
             .add_observer(TabOrder::on_tab_removed)
             ;
@@ -122,8 +122,10 @@ impl TabClose {
         // If closed tab was active, select adjacent tab from ordered list
         if was_active {
             if let Some(idx) = tab_order.0.iter().position(|&e| e == target) {
-                // Prefer next tab, fall back to previous
-                let next = tab_order.0.get(idx + 1).or_else(|| idx.checked_sub(1).and_then(|i| tab_order.0.get(i)));
+                // Prefer next tab, fall back to previous, skip the one being despawned
+                let next = tab_order.0.get(idx + 1)
+                    .or_else(|| idx.checked_sub(1).and_then(|i| tab_order.0.get(i)))
+                    .filter(|&&e| e != target);
                 if let Some(&entity) = next {
                     commands.trigger(TabSelect { entity });
                 }
@@ -137,46 +139,89 @@ impl From<Entity> for TabClose {
     }
 }
 
-/// Create a new tab with content. Not an EntityEvent since no entity exists yet.
+
 #[derive(Event)]
-pub struct TabCreate {
+pub struct TabCreateRequest {
     pub name: String,
-    pub file_path: Option<PathBuf>,
     pub words: Vec<Word>,
+    pub file_path: Option<PathBuf>,
+    pub font_name: Option<String>,
+    pub font_size: f32,
+    pub wpm: u32,
+    pub current_index: usize,
+    pub is_active: bool,
 }
-impl TabCreate {
+impl TabCreateRequest {
+    pub fn new(name: String, words: Vec<Word>) -> Self {
+        Self {
+            name,
+            words,
+            file_path: None,
+            font_name: None,
+            font_size: FONT_SIZE_DEFAULT,
+            wpm: WPM_DEFAULT,
+            current_index: 0,
+            is_active: true,
+        }
+    }
+    pub fn with_file_path(mut self, path: PathBuf) -> Self {
+        self.file_path = Some(path);
+        self
+    }
+    pub fn with_font(mut self, name: String, size: f32) -> Self {
+        self.font_name = Some(name);
+        self.font_size = size;
+        self
+    }
+    pub fn with_wpm(mut self, wpm: u32) -> Self {
+        self.wpm = wpm;
+        self
+    }
+    pub fn with_current_index(mut self, index: usize) -> Self {
+        self.current_index = index;
+        self
+    }
+    pub fn with_active(mut self, active: bool) -> Self {
+        self.is_active = active;
+        self
+    }
     fn on_trigger(
-        trigger: On<TabCreate>,
+        trigger: On<TabCreateRequest>,
         mut commands: Commands,
         fonts: Res<FontsStore>,
         active_tab: Option<Single<Entity, With<ActiveTab>>>,
     ) {
-        // Deactivate current active tab
-        if let Some(current_active) = active_tab {
-            commands.entity(current_active.into_inner()).remove::<ActiveTab>();
+        if trigger.is_active {
+            // Deactivate current active tab if the new one is to be active
+            if let Some(current_active) = active_tab {
+                commands.entity(current_active.into_inner()).remove::<ActiveTab>();
+            }
         }
         
-        // Spawn new tab
-        let default_font = fonts.default_font();
-        let font_name = default_font.map(|f| f.name.clone()).unwrap_or_default();
-        let font_handle = default_font.map(|f| f.handle.clone()).unwrap_or_default();
+        let font_data = trigger.font_name.as_ref()
+            .and_then(|name| fonts.get_by_name(name))
+            .or_else(|| fonts.default_font());
+        let font_name = font_data.map(|f| f.name.clone()).unwrap_or_default();
+        let font_handle = font_data.map(|f| f.handle.clone()).unwrap_or_default();
         
         let mut entity_commands = commands.spawn((
             TabMarker,
-            ActiveTab,
             Name::new(trigger.name.clone()),
             TabFontSettings {
                 font_name,
                 font_handle,
-                font_size: FONT_SIZE_DEFAULT,
+                font_size: trigger.font_size,
             },
-            TabWpm(WPM_DEFAULT),
+            TabWpm(trigger.wpm),
             WordsManager {
                 words: trigger.words.clone(),
-                current_index: 0,
+                current_index: trigger.current_index,
             },
         ));
         
+        if trigger.is_active {
+            entity_commands.insert(ActiveTab);
+        }
         if let Some(path) = &trigger.file_path {
             entity_commands.insert(TabFilePath(path.clone()));
         }

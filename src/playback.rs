@@ -12,7 +12,7 @@ impl Plugin for PlaybackPlugin {
     fn build(&self, app: &mut App) {
         app
             .add_message::<PlaybackCommand>()
-            .add_systems(Update, process_playback_commands)
+            .add_systems(Update, PlaybackCommand::process)
             ;
     }
 }
@@ -20,7 +20,7 @@ impl Plugin for PlaybackPlugin {
 const WORD_SKIP_AMOUNT: usize = 5;
 
 // ============================================================================
-// Commands
+// Playback Commands
 // ============================================================================
 
 #[derive(Message)]
@@ -40,53 +40,53 @@ impl PlaybackCommand {
     pub fn skip_backward() -> Self {
         Self::SkipBackward(WORD_SKIP_AMOUNT)
     }
-}
-
-
-// ============================================================================
-// Systems
-// ============================================================================
-
-fn process_playback_commands(
-    mut events: MessageReader<PlaybackCommand>,
-    current_state: Res<State<ReadingState>>,
-    mut next_state: ResMut<NextState<ReadingState>>,
-    mut active_tabs: Query<(&mut TabWpm, &mut WordsManager), With<ActiveTab>>,
-) {
-    for cmd in events.read() {
-        match cmd {
-            PlaybackCommand::TogglePlayPause => {
-                match current_state.get() {
-                    ReadingState::Playing => next_state.set(ReadingState::Paused),
-                    _ => next_state.set(ReadingState::Playing),
+    fn process(
+        mut events: MessageReader<PlaybackCommand>,
+        current_state: Res<State<ReadingState>>,
+        mut next_state: ResMut<NextState<ReadingState>>,
+        mut active_tabs: Query<(&mut TabWpm, &mut WordsManager), With<ActiveTab>>,
+    ) {
+        for cmd in events.read() {
+            match cmd {
+                PlaybackCommand::TogglePlayPause => {
+                    match current_state.get() {
+                        ReadingState::Playing => next_state.set(ReadingState::Paused),
+                        _ => {
+                            let has_words = active_tabs.single()
+                                .is_ok_and(|(_, words_mgr)| !words_mgr.words.is_empty());
+                            if has_words {
+                                next_state.set(ReadingState::Playing);
+                            }
+                        }
+                    }
                 }
-            }
-            PlaybackCommand::Stop => {
-                next_state.set(ReadingState::Idle);
-            }
-            PlaybackCommand::Restart => {
-                if let Ok((_, mut words_mgr)) = active_tabs.single_mut() {
-                    words_mgr.current_index = 0;
+                PlaybackCommand::Stop => {
+                    next_state.set(ReadingState::Idle);
                 }
-            }
-            PlaybackCommand::SkipForward(amount) => {
-                if let Ok((_, mut words_mgr)) = active_tabs.single_mut() {
-                    let word_count = words_mgr.words.len();
-                    words_mgr.current_index = (words_mgr.current_index + *amount)
-                        .min(word_count.saturating_sub(1));
+                PlaybackCommand::Restart => {
+                    if let Ok((_, mut words_mgr)) = active_tabs.single_mut() {
+                        words_mgr.current_index = 0;
+                    }
                 }
-            }
-            PlaybackCommand::SkipBackward(amount) => {
-                if let Ok((_, mut words_mgr)) = active_tabs.single_mut() {
-                    words_mgr.current_index = words_mgr.current_index.saturating_sub(*amount);
+                PlaybackCommand::SkipForward(amount) => {
+                    if let Ok((_, mut words_mgr)) = active_tabs.single_mut() {
+                        let word_count = words_mgr.words.len();
+                        words_mgr.current_index = (words_mgr.current_index + *amount)
+                            .min(word_count.saturating_sub(1));
+                    }
                 }
-            }
-            PlaybackCommand::AdjustWpm(delta) => {
-                if let Ok((mut tab_wpm, _)) = active_tabs.single_mut() {
-                    let new_wpm = (tab_wpm.0 as i32 + delta)
-                        .max(crate::reader::WPM_MIN as i32)
-                        .min(crate::reader::WPM_MAX as i32);
-                    tab_wpm.0 = new_wpm as u32;
+                PlaybackCommand::SkipBackward(amount) => {
+                    if let Ok((_, mut words_mgr)) = active_tabs.single_mut() {
+                        words_mgr.current_index = words_mgr.current_index.saturating_sub(*amount);
+                    }
+                }
+                PlaybackCommand::AdjustWpm(delta) => {
+                    if let Ok((mut tab_wpm, _)) = active_tabs.single_mut() {
+                        let new_wpm = (tab_wpm.0 as i32 + delta)
+                            .max(crate::reader::WPM_MIN as i32)
+                            .min(crate::reader::WPM_MAX as i32);
+                        tab_wpm.0 = new_wpm as u32;
+                    }
                 }
             }
         }
