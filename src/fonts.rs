@@ -1,8 +1,9 @@
 //! Font management and caching.
 //!
-//! Scans available fonts from assets/fonts
+//! Loads built-in fonts from assets/fonts on all platforms.
+//! On native, also discovers additional font files dropped into the assets/fonts directory.
 
-use bevy::log::{info, warn};
+use bevy::log::info;
 use bevy::prelude::*;
 
 pub struct FontsPlugin;
@@ -14,6 +15,11 @@ impl Plugin for FontsPlugin {
             ;
     }
 }
+
+const BUILT_IN_FONTS: &[&str] = &[
+    "JetBrainsMono-Regular.ttf",
+    "UbuntuMono-Regular.ttf",
+];
 
 pub struct FontData {
     pub name: String,
@@ -35,27 +41,28 @@ impl FontsStore {
         mut fonts_store: ResMut<FontsStore>,
         asset_server: Res<AssetServer>,
     ) {
-        let fonts_dir = std::path::Path::new("assets/fonts");
-        match std::fs::read_dir(fonts_dir) {
-            Ok(entries) => {
-                fonts_store.fonts.clear();
+        let mut names: Vec<String> = BUILT_IN_FONTS.iter().map(|&s| s.to_string()).collect();
+
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            if let Ok(entries) = std::fs::read_dir("assets/fonts") {
                 for entry in entries.flatten() {
-                    let path = entry.path();
-                    if path.extension().is_some_and(|e| e == "ttf" || e == "otf") {
-                        if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                            fonts_store.fonts.push(FontData {
-                                name: name.to_string(),
-                                handle: asset_server.load(format!("fonts/{}", name)),
-                            });
+                    let file_name = entry.file_name().to_string_lossy().to_string();
+                    if file_name.ends_with(".ttf") || file_name.ends_with(".otf") {
+                        if !names.contains(&file_name) {
+                            names.push(file_name);
                         }
                     }
                 }
-                fonts_store.fonts.sort_by(|a, b| a.name.cmp(&b.name));
-                info!("Loaded {} fonts in assets/fonts", fonts_store.fonts.len());
-            }
-            Err(e) => {
-                warn!("Could not read fonts directory: {}", e);
             }
         }
+
+        names.sort();
+
+        fonts_store.fonts = names.into_iter().map(|name| {
+            let handle = asset_server.load(format!("fonts/{}", name));
+            FontData { name, handle }
+        }).collect();
+        info!("Loaded {} fonts", fonts_store.fonts.len());
     }
 }

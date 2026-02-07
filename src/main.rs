@@ -18,14 +18,21 @@ mod ui;
 
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window {
-                title: "Arre Mind Reader".into(),
-                resolution: (1280, 720).into(),
+        .add_plugins(DefaultPlugins
+            .set(WindowPlugin {
+                primary_window: Some(Window {
+                    title: "Arre Mind Reader".into(),
+                    resolution: (1280, 720).into(),
+                    ..default()
+                }),
                 ..default()
-            }),
-            ..default()
-        }))
+            })
+            // Disable asset meta files as WASM version requests them and fails when they are not found.
+            .set(AssetPlugin {
+                meta_check: bevy::asset::AssetMetaCheck::Never,
+                ..default()
+            })
+        )
         .add_plugins(EguiPlugin::default())
         .add_plugins((
             fonts::FontsPlugin, 

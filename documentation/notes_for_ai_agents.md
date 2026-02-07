@@ -33,7 +33,7 @@ Each file follows: imports → Plugin definition → constants → types/compone
 - `orp.rs` - ORP display: three `Text2d` entities (left/center/right) split around the fixation letter. Fully reactive — `on_word_changed` observer updates text content, `on_font_changed` observer updates font and positions
 - `input.rs` - Keyboard → `PlaybackCommand` mapping
 - `text.rs` - `Word` struct, `TextParser` trait, `TxtParser`, `get_parser_for_path()` registry
-- `fonts.rs` - `FontsStore` resource, scans `assets/fonts` at startup
+- `fonts.rs` - `FontsStore` resource, loads built-in fonts via `AssetServer` on all platforms; on native also discovers additional `.ttf`/`.otf` files in `assets/fonts/`
 - `persistence.rs` - RON save/load, periodic timer + app exit trigger, restores via `TabCreateRequest`
 - `ui/` - egui UI: `tab_bar.rs` (tab strip), `controls.rs` (playback/WPM/font), `dialogs.rs` (new tab dialog, async file load)
 
@@ -45,12 +45,22 @@ Each file follows: imports → Plugin definition → constants → types/compone
 - **UI → state:** UI emits events/triggers, observers react. No direct component mutation in UI systems.
 - **Bevy 0.18 naming:** `Message`/`MessageWriter`/`MessageReader` for buffered events (not `Event`/`EventWriter`/`EventReader`). `Event` + `commands.trigger()` for immediate observer-based dispatch.
 
+## Targets
+The app supports two build targets: **native** (Linux/macOS/Windows) and **WASM** (browser). See `documentation/wasm_build.md` for WASM build instructions.
+
+- `#[cfg(target_arch = "wasm32")]` / `#[cfg(not(target_arch = "wasm32"))]` guards platform-specific code
+- `Cargo.toml` uses `[target.'cfg(...)'.dependencies]` for platform-specific deps
+- Default features include `native` (enables `bevy/dynamic_linking`); WASM builds use `--no-default-features`
+- **All changes must compile for both targets.** Verify with `cargo check` (native) and `cargo check --target wasm32-unknown-unknown --no-default-features` (WASM)
+
 ## Dependencies
 - `bevy` 0.18 - Game engine
 - `bevy_egui` 0.39 - Egui integration
 - `serde` + `ron` - Persistence
-- `rfd` 0.15 - Native file dialogs
-- `dirs` - Platform config directory
+- `rfd` 0.15 - File dialogs (native + WASM with confirm() fallback)
+- `dirs` - Platform config directory (native only)
+- `gloo-storage` - localStorage wrapper (WASM only)
+- `web-sys` - Web API bindings (WASM only)
 
 ## Bevy 0.18 Patterns
 - `Camera2d` component (not bundle)

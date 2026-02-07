@@ -5,7 +5,6 @@
 use bevy::log::{debug, info, warn};
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 
 use crate::tabs::{
     ActiveTab, TabCreateRequest, TabFilePath, TabFontSettings, TabMarker, TabWpm, WordsManager,
@@ -32,7 +31,7 @@ const SAVE_INTERVAL_SECS: f32 = 5.0;
 #[derive(Serialize, Deserialize)]
 struct SavedTab {
     name: String,
-    file_path: Option<PathBuf>,
+    file_path: Option<String>,
     font_name: String,
     font_size: f32,
     wpm: u32,
@@ -45,13 +44,10 @@ struct SavedTab {
 struct ProgramState {
     tabs: Vec<SavedTab>,
 }
+#[cfg(not(target_arch = "wasm32"))]
 impl ProgramState {
-    fn get_config_path() -> Option<PathBuf> {
-        dirs::config_dir().map(|p| p.join("arre-mind-reader"))
-    }
-
     fn save(&self) {
-        let Some(config_dir) = Self::get_config_path() else {
+        let Some(config_dir) = dirs::config_dir().map(|p| p.join("arre-mind-reader")) else {
             warn!("Could not determine config directory for saving");
             return;
         };
@@ -73,7 +69,7 @@ impl ProgramState {
     }
 
     fn load() -> Self {
-        let Some(config_dir) = Self::get_config_path() else {
+        let Some(config_dir) = dirs::config_dir().map(|p| p.join("arre-mind-reader")) else {
             warn!("Could not determine config directory");
             return ProgramState::default();
         };
@@ -95,6 +91,43 @@ impl ProgramState {
             },
             Err(e) => {
                 warn!("Failed to read tabs file: {}", e);
+                ProgramState::default()
+            }
+        }
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl ProgramState {
+    fn save(&self) {
+        use gloo_storage::Storage;
+        match ron::ser::to_string_pretty(self, ron::ser::PrettyConfig::default()) {
+            Ok(content) => {
+                if let Err(e) = gloo_storage::LocalStorage::set(TABS_FILE, content) {
+                    warn!("Failed to save to localStorage: {:?}", e);
+                } else {
+                    debug!("Saved {} tabs to localStorage", self.tabs.len());
+                }
+            }
+            Err(e) => warn!("Failed to serialize tabs: {}", e),
+        }
+    }
+
+    fn load() -> Self {
+        use gloo_storage::Storage;
+        match gloo_storage::LocalStorage::get::<String>(TABS_FILE) {
+            Ok(content) => match ron::from_str::<ProgramState>(&content) {
+                Ok(state) => {
+                    debug!("Loaded {} tabs from localStorage", state.tabs.len());
+                    state
+                }
+                Err(e) => {
+                    warn!("Failed to parse tabs from localStorage: {}", e);
+                    ProgramState::default()
+                }
+            },
+            Err(_) => {
+                debug!("No saved tabs found in localStorage");
                 ProgramState::default()
             }
         }

@@ -5,7 +5,7 @@
 use bevy::prelude::*;
 use bevy::tasks::{block_on, poll_once, AsyncComputeTaskPool, Task};
 use bevy_egui::{EguiContexts, egui};
-use std::path::PathBuf;
+use std::path::Path;
 
 use crate::tabs::{TabCreateRequest, TabMarker};
 use crate::text::{TxtParser, TextParser, Word, get_parser_for_path};
@@ -26,8 +26,8 @@ pub struct PendingFileLoad {
 }
 
 pub struct FileLoadResult {
-    pub path: PathBuf,
-    pub name: String,
+    pub file_name: String,
+    pub tab_name: String,
     pub words: Vec<Word>,
 }
 
@@ -66,16 +66,18 @@ pub fn new_tab_dialog_system(
                             .pick_file()
                             .await?;
                         
-                        let path = file_handle.path().to_path_buf();
-                        let parser = get_parser_for_path(&path)?;
-                        let content = std::fs::read_to_string(&path).ok()?;
-                        let name = path.file_stem()
+                        let file_name = file_handle.file_name();
+                        let bytes = file_handle.read().await;
+                        let content = String::from_utf8(bytes).ok()?;
+                        let parser = get_parser_for_path(Path::new(&file_name))?;
+                        let tab_name = Path::new(&file_name)
+                            .file_stem()
                             .and_then(|s| s.to_str())
                             .unwrap_or("Untitled")
                             .to_string();
                         let words = parser.parse(&content);
                         
-                        Some(FileLoadResult { path, name, words })
+                        Some(FileLoadResult { file_name, tab_name, words })
                     });
                     pending_load.task = Some(task);
                 }
@@ -115,7 +117,8 @@ pub fn new_tab_dialog_system(
                     dialog.text_input.clear();
                 }
                 
-                if ui.add_enabled(!is_loading, egui::Button::new("Cancel")).clicked() {
+                if ui.button("Cancel").clicked() {
+                    pending_load.task = None;
                     dialog.open = false;
                     dialog.text_input.clear();
                 }
@@ -132,7 +135,7 @@ pub fn poll_file_load_task(
     
     if let Some(result) = block_on(poll_once(task)) {
         if let Some(file_result) = result {
-            commands.trigger(TabCreateRequest::new(file_result.name, file_result.words).with_file_path(file_result.path));
+            commands.trigger(TabCreateRequest::new(file_result.tab_name, file_result.words).with_file_path(file_result.file_name));
             dialog.open = false;
         }
         pending_load.task = None;

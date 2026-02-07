@@ -3,7 +3,6 @@
 //! Provides tab components, bundles, entity events, and observers for reactive tab management.
 
 use bevy::prelude::*;
-use std::path::PathBuf;
 
 use crate::fonts::FontsStore;
 use crate::reader::{FONT_SIZE_DEFAULT, WPM_DEFAULT, WordChanged};
@@ -75,7 +74,7 @@ pub struct TabFontSettings {
 pub struct TabWpm(pub u32);
 
 #[derive(Component)]
-pub struct TabFilePath(pub PathBuf);
+pub struct TabFilePath(pub String);
 
 #[derive(Component)]
 pub struct WordsManager {
@@ -214,7 +213,7 @@ impl TabFontChanged {
 pub struct TabCreateRequest {
     pub name: String,
     pub words: Vec<Word>,
-    pub file_path: Option<PathBuf>,
+    pub file_path: Option<String>,
     pub font_name: Option<String>,
     pub font_size: f32,
     pub wpm: u32,
@@ -234,8 +233,8 @@ impl TabCreateRequest {
             is_active: true,
         }
     }
-    pub fn with_file_path(mut self, path: PathBuf) -> Self {
-        self.file_path = Some(path);
+    pub fn with_file_path(mut self, name: impl Into<String>) -> Self {
+        self.file_path = Some(name.into());
         self
     }
     pub fn with_font(mut self, name: String, size: f32) -> Self {
