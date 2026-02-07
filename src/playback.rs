@@ -5,7 +5,7 @@
 use bevy::prelude::*;
 
 use crate::tabs::{ActiveTab, TabWpm, WordsManager};
-use crate::reader::ReadingState;
+use crate::reader::{ReadingState, WordChanged};
 
 pub struct PlaybackPlugin;
 impl Plugin for PlaybackPlugin {
@@ -41,6 +41,7 @@ impl PlaybackCommand {
         Self::SkipBackward(WORD_SKIP_AMOUNT)
     }
     fn process(
+        mut commands: Commands,
         mut events: MessageReader<PlaybackCommand>,
         current_state: Res<State<ReadingState>>,
         mut next_state: ResMut<NextState<ReadingState>>,
@@ -66,16 +67,19 @@ impl PlaybackCommand {
                 PlaybackCommand::Restart => {
                     if let Ok((_, mut words_mgr)) = active_tabs.single_mut() {
                         words_mgr.restart();
+                        commands.trigger(WordChanged);
                     }
                 }
                 PlaybackCommand::SkipForward(amount) => {
                     if let Ok((_, mut words_mgr)) = active_tabs.single_mut() {
                         words_mgr.skip_forward(*amount);
+                        commands.trigger(WordChanged);
                     }
                 }
                 PlaybackCommand::SkipBackward(amount) => {
                     if let Ok((_, mut words_mgr)) = active_tabs.single_mut() {
                         words_mgr.skip_backward(*amount);
+                        commands.trigger(WordChanged);
                     }
                 }
                 PlaybackCommand::AdjustWpm(delta) => {

@@ -6,7 +6,7 @@ use bevy::prelude::*;
 use std::path::PathBuf;
 
 use crate::fonts::FontsStore;
-use crate::reader::{FONT_SIZE_DEFAULT, WPM_DEFAULT};
+use crate::reader::{FONT_SIZE_DEFAULT, WPM_DEFAULT, WordChanged};
 use crate::text::Word;
 
 pub struct TabsPlugin;
@@ -130,13 +130,12 @@ impl TabSelect {
     ) {
         let target = trigger.entity;
         
-        // Remove ActiveTab from current active tab
         if let Some(current_active) = active_tab {
             commands.entity(current_active.into_inner()).remove::<ActiveTab>();
         }
         
-        // Add ActiveTab to selected
         commands.entity(target).insert(ActiveTab);
+        commands.trigger(WordChanged);
     }
 }
 impl From<Entity> for TabSelect {
@@ -226,15 +225,7 @@ impl TabCreateRequest {
         trigger: On<TabCreateRequest>,
         mut commands: Commands,
         fonts: Res<FontsStore>,
-        active_tab: Option<Single<Entity, With<ActiveTab>>>,
     ) {
-        if trigger.is_active {
-            // Deactivate current active tab if the new one is to be active
-            if let Some(current_active) = active_tab {
-                commands.entity(current_active.into_inner()).remove::<ActiveTab>();
-            }
-        }
-        
         // Resolve font: try requested name → fall back to first available font
         let font_data = trigger.font_name.as_ref()
             .and_then(|name| fonts.get_by_name(name))
@@ -257,11 +248,13 @@ impl TabCreateRequest {
             },
         ));
         
-        if trigger.is_active {
-            entity_commands.insert(ActiveTab);
-        }
         if let Some(path) = &trigger.file_path {
             entity_commands.insert(TabFilePath(path.clone()));
+        }
+        
+        if trigger.is_active {
+            let entity = entity_commands.id();
+            commands.trigger(TabSelect { entity });
         }
     }
 }

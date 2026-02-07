@@ -25,10 +25,10 @@ impl Plugin for OrpPlugin {
     }
 }
 
-pub const RETICLE_OFFSET_Y: f32 = 40.0;
-pub const RETICLE_WIDTH: f32 = 3.0;
-pub const RETICLE_HEIGHT: f32 = 40.0;
-pub const RETICLE_ALPHA: f32 = 0.5;
+const RETICLE_OFFSET_Y: f32 = 40.0;
+const RETICLE_WIDTH: f32 = 3.0;
+const RETICLE_HEIGHT: f32 = 40.0;
+const RETICLE_ALPHA: f32 = 0.5;
 
 // ============================================================================
 // Components

@@ -24,6 +24,7 @@ impl Plugin for ReaderPlugin {
             .add_plugins((OrpPlugin, InputPlugin, PlaybackPlugin, TabsPlugin))
             .add_systems(Update, ReadingState::tick.run_if(in_state(ReadingState::Playing)))
             .add_systems(OnEnter(ReadingState::Playing), ReadingState::on_start_playing)
+            .add_observer(WordChanged::on_trigger)
             ;
     }
 }
@@ -37,35 +38,25 @@ pub enum ReadingState {
     Paused,
 }
 impl ReadingState {
-    /// Sets the initial timer for the current word when entering Playing state.
-    fn on_start_playing(
-        mut timer: ResMut<ReadingTimer>,
-        active_tab: Single<(&TabWpm, &WordsManager), With<ActiveTab>>,
-    ) {
-        let (tab_wpm, words_mgr) = active_tab.into_inner();
-        if let Some(word) = words_mgr.current_word() {
-            let delay = Duration::from_millis(word.display_duration_ms(tab_wpm.0));
-            timer.timer = Timer::new(delay, TimerMode::Once);
-        }
+    fn on_start_playing(mut commands: Commands) {
+        commands.trigger(WordChanged);
     }
 
-    /// Advances words when the per-word timer expires. Each word gets a fresh
-    /// one-shot timer based on its display_duration_ms (varies by punctuation, length, etc.).
+    /// Advances words when the per-word timer expires, then signals WordChanged
+    /// so the timer is reset for the next word by the observer.
     fn tick(
         time: Res<Time>,
+        mut commands: Commands,
         mut timer: ResMut<ReadingTimer>,
-        active_tab: Single<(&TabWpm, &mut WordsManager), With<ActiveTab>>,
+        active_tab: Single<&mut WordsManager, With<ActiveTab>>,
         mut next_state: ResMut<NextState<ReadingState>>,
     ) {
-        let (tab_wpm, mut words_mgr) = active_tab.into_inner();
-        
         timer.timer.tick(time.delta());
         
         if timer.timer.just_finished() {
+            let mut words_mgr = active_tab.into_inner();
             if words_mgr.advance() {
-                let word = words_mgr.current_word().unwrap();
-                let delay = Duration::from_millis(word.display_duration_ms(tab_wpm.0));
-                timer.timer = Timer::new(delay, TimerMode::Once);
+                commands.trigger(WordChanged);
             } else {
                 next_state.set(ReadingState::Idle);
             }
@@ -76,4 +67,22 @@ impl ReadingState {
 #[derive(Resource, Default)]
 pub struct ReadingTimer {
     pub timer: Timer,
+}
+
+/// Fired whenever the current word changes (advance, skip, restart, tab switch).
+/// The observer resets ReadingTimer to the new word's display duration.
+#[derive(Event)]
+pub struct WordChanged;
+impl WordChanged {
+    fn on_trigger(
+        _trigger: On<WordChanged>,
+        mut timer: ResMut<ReadingTimer>,
+        active_tabs: Query<(&TabWpm, &WordsManager), With<ActiveTab>>,
+    ) {
+        let Ok((wpm, words_mgr)) = active_tabs.single() else { return };
+        if let Some(word) = words_mgr.current_word() {
+            let delay = Duration::from_millis(word.display_duration_ms(wpm.0));
+            timer.timer = Timer::new(delay, TimerMode::Once);
+        }
+    }
 }

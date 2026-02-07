@@ -1,49 +1,54 @@
 # Notes for AI Agents
 
 ## Project Overview
-Arre Mind Reader is a speed-reading application built with Bevy 0.18 and Rust. It implements RSVP (Rapid Serial Visual Presentation) reading method.
+Arre Mind Reader is a speed-reading application built with Bevy 0.18 and Rust. It implements RSVP (Rapid Serial Visual Presentation) — words are shown one at a time at a configurable rate, with a fixed eye fixation point (ORP).
+
+See `work.md` in the project root for tracked bugs, refactors, and deferred items.
 
 ## Architecture
 - **Core Engine:** Bevy 0.18 (Rust)
 - **UI Overlay:** bevy_egui 0.39 for egui-based panels
 - **Rendering:** `Text2d` in world space for the reader display
-- **Data Flow:** Tab entities own all state via components → ORP display reads active tab's components
+- **Data Flow:** Tab entities own all per-tab state via components → systems read the `ActiveTab`-marked entity
 
-## Key Concepts
+## Design Decisions
 - **ORP (Optical Recognition Point):** The letter the eye fixates on, positioned at screen center (0,0). Research shows slightly left-of-center is optimal.
-- **Split-text rendering:** Words split into left/center/right using `Anchor::CenterRight` and `Anchor::CenterLeft` to grow outward from center.
-- **ECS Tab Modeling:** Each tab is an entity with components: `TabMarker`, `Name`, `TabFontSettings`, `TabWpm`, `WordsManager`, optional `TabFilePath`, and `ActiveTab` marker for the currently active tab.
-- **Per-tab settings:** Font and WPM are stored per-tab, not globally. Highlight color is hardcoded red.
+- **Monospace fonts only.** The ORP positioning uses a fixed `CHAR_WIDTH_RATIO` (0.6) to estimate character width. Proportional fonts will misalign. This is intentional — RSVP works best with monospace.
+- **Per-tab settings.** Font and WPM are stored per-tab, not globally. ORP highlight color is hardcoded red.
+- **WordChanged event.** A `WordChanged` trigger (in `reader.rs`) is fired whenever the current word changes — by tick advance, skip, restart, or tab switch. A single observer resets `ReadingTimer` to the new word's display duration. This decouples word navigation from timer management. All code that changes the current word must trigger `WordChanged`.
+- **Centralized tab creation.** All tab creation goes through `TabCreateRequest` (with builder pattern). Both persistence restore and UI dialogs trigger this event — never spawn tab entities manually.
+- **Encapsulation.** `WordsManager` and `TabOrder` expose methods for their operations. Use the API (e.g. `advance()`, `current_word()`, `find_adjacent()`) instead of accessing their fields directly.
+- **Paragraph detection.** Blank lines in source text mark the *last word before the gap* as `is_paragraph_end`, not the first word after. This ensures the reading pause happens at the end of the paragraph.
+- **Display duration uses max-wins multiplier** (not cumulative). A sentence-ending long word gets the sentence-end pause (×3.0), not sentence-end × long-word.
+- **Restart doesn't auto-play.** Pressing R resets `current_index` to 0 but doesn't change `ReadingState`. User must press Play separately. This is intentional to preserve user choice.
 
 ## Module Structure
 Each file follows: imports → Plugin definition → constants → types/components → systems
 
-- `main.rs` - App entry point, plugin registration
-- `reader.rs` - `ReaderPlugin` orchestrates sub-plugins, manages `ReadingState` transitions and timing tick. Contains WPM/font constants
-- `tabs.rs` - `TabsPlugin` with tab components (`TabMarker`, `TabFontSettings`, `TabWpm`, `TabFilePath`, `WordsManager`, `ActiveTab`), `TabOrder` resource (encapsulated, exposes `entities()` and `find_adjacent()`), `WordsManager` with encapsulated API (`has_words()`, `current_word()`, `progress()`, `advance()`, `skip_forward/backward()`, `restart()`), entity events (`TabSelect`, `TabClose`), `TabCreateRequest` event with builder pattern, and observers for reactive tab management
-- `playback.rs` - `PlaybackPlugin` with `PlaybackCommand` message enum (Play/Pause/Stop/etc.) and `PlaybackCommand::process` system
-- `orp.rs` - `OrpPlugin` with display entity setup, word display updates with reactive font size positioning (hardcoded red highlight)
-- `input.rs` - `InputPlugin` emits `PlaybackCommand` messages from keyboard input
-- `text.rs` - `TextParser` trait, `TxtParser` implementation, `get_parser_for_path()` registry function, `Word` struct with `new()` constructor and ORP/duration methods
-- `fonts.rs` - `FontsPlugin` with `FontsStore` resource, scans assets/fonts at startup
-- `persistence.rs` - `PersistencePlugin` with RON format save/load, triggers `TabCreateRequest` events on load
-- `ui/` - UI module directory:
-  - `mod.rs` - `UiPlugin` registration
-  - `tab_bar.rs` - Tab strip rendering, emits `TabSelect`/`TabClose` events
-  - `controls.rs` - Playback controls, progress, WPM slider, font selector
-  - `dialogs.rs` - New tab dialog, async file loading with `get_parser_for_path()`, emits `TabCreateRequest` events
+- `main.rs` - App entry, plugin registration, camera spawn
+- `reader.rs` - `ReaderPlugin` orchestrates sub-plugins, owns `ReadingState` (Idle/Playing/Paused), `ReadingTimer`, and `WordChanged` event+observer. Per-word timing: each word gets a one-shot timer based on its `display_duration_ms`
+- `tabs.rs` - `TabsPlugin` with tab components, `TabOrder` resource, `WordsManager` component, entity events (`TabSelect`, `TabClose`), `TabCreateRequest` event, and lifecycle observers
+- `playback.rs` - `PlaybackCommand` message enum with `PlaybackCommand::process` system
+- `orp.rs` - ORP display: three `Text2d` entities (left/center/right) split around the fixation letter. Positions recomputed each frame from active tab's font size
+- `input.rs` - Keyboard → `PlaybackCommand` mapping
+- `text.rs` - `Word` struct, `TextParser` trait, `TxtParser`, `get_parser_for_path()` registry
+- `fonts.rs` - `FontsStore` resource, scans `assets/fonts` at startup
+- `persistence.rs` - RON save/load, periodic timer + app exit trigger, restores via `TabCreateRequest`
+- `ui/` - egui UI: `tab_bar.rs` (tab strip), `controls.rs` (playback/WPM/font), `dialogs.rs` (new tab dialog, async file load)
 
 ## ECS Event Patterns
-- **Tab events** use `EntityEvent` pattern with separate structs (`TabSelect`, `TabClose`) for entity-targeted events
-- **Playback** uses `Message` enum (`PlaybackCommand`) for buffered events processed by central system
-- **UI emits events/commands** rather than directly mutating state - observers and systems react to events
-- Bevy 0.18 uses `Message`/`MessageWriter`/`MessageReader` for buffered events (not `Event`/`EventWriter`/`EventReader`)
+- **Tab lifecycle:** `EntityEvent` structs (`TabSelect`, `TabClose`) with observers. `TabOrder` auto-updates via `Add`/`Remove` observers on `TabMarker`.
+- **Playback:** `Message` enum (`PlaybackCommand`) with `MessageWriter`/`MessageReader`
+- **Word lifecycle:** `WordChanged` trigger (global `Event`) fired after any word navigation. Observer in `reader.rs` resets the reading timer.
+- **UI → state:** UI emits events/commands, observers and systems react. Exception: `controls_system` directly mutates `TabWpm`/`TabFontSettings` for continuous sliders (intentional, will be reworked).
+- **Bevy 0.18 naming:** `Message`/`MessageWriter`/`MessageReader` for buffered events (not `Event`/`EventWriter`/`EventReader`)
 
 ## Dependencies
 - `bevy` 0.18 - Game engine
-- `bevy_egui` 0.39 - Egui integration for settings panel
+- `bevy_egui` 0.39 - Egui integration
 - `serde` + `ron` - Persistence
 - `rfd` 0.15 - Native file dialogs
+- `dirs` - Platform config directory
 
 ## Bevy 0.18 Patterns
 - `Camera2d` component (not bundle)
@@ -51,39 +56,21 @@ Each file follows: imports → Plugin definition → constants → types/compone
 - `Sprite::from_color()` for simple rectangles
 - `children![]` macro for hierarchies
 - `EguiPlugin::default()` (has struct fields now)
-- States use `init_state::<T>()` pattern
+- `EventReader/Writer` are now `MessageReader/Writer` (new Events are now for triggers, Messages for old buffered Events)
 
 ## Keyboard Shortcuts
 - `Space` - Play/Pause
-- `Escape` - Stop, show UI
+- `Escape` - Stop
 - `←/→` - Skip 5 words back/forward
 - `↑/↓` - Adjust WPM ±50
-- `R` - Restart
-
-## Word Methods
-ORP index calculation (`Word::orp_index()`):
-```rust
-match self.text.chars().count() {
-    0 | 1 => 0,
-    2..=5 => 1,
-    6..=9 => 2,
-    10..=13 => 3,
-    _ => 4,
-}
-```
-
-Display duration (`Word::display_duration_ms(wpm)`) - uses max multiplier, not cumulative:
-- Base: `60000 / WPM` ms
-- Long word (>10 chars): ×1.3
-- Comma/semicolon: ×2.0
-- Period/question/exclamation: ×3.0
-- Paragraph end: ×4.0
+- `R` - Restart (reset to beginning, does not auto-play)
 
 ## Code Style
 - Query variables use plural form (e.g., `tabs`, `left_texts`), not `_q` suffix
-- Behavior lives with data: `Word` has `new()`, `orp_index()` and `display_duration_ms()` methods; `WordsManager` encapsulates word navigation; `TabOrder` encapsulates entity ordering
+- Encapsulate component internals behind methods. Use the API, don't reach into fields.
 - Each module with a plugin defines it near the top after imports
 - Don't put newlines between struct and its impl blocks
+- **Comments must be timeless.** Never leave comments that reference the current conversation, refactoring session, or rationale like "we moved this here because X was duplicated." Comments should make sense to a reader who has no context of how the code evolved. If the code is self-explanatory, no comment is needed.
 
 ### Plugin code style
 ```rust
@@ -96,16 +83,21 @@ impl Plugin for InputPlugin {
     }
 }
 ```
-Note: no new line between struct and impl, each app usage on its own line and finishing semicolon also on its own line.
+No newline between struct and impl. Each app builder call on its own line. Trailing semicolon on its own line.
 
 ### Coupling code style
-If given component represents logical whole and owns specific systems, put its system within its impl block, f.e
+If a component/event represents a logical whole and owns specific systems, keep its systems within its impl block:
 ```rust
 #[derive(Component)]
 pub struct MyComponent;
 impl MyComponent {
     fn system() {
-        // System code, keep it private be default as it should only be used in local plugin
+        // Keep private — only referenced by the local plugin
     }
 }
 ```
+
+## Agent Guidelines
+- **Think before implementing.** When asked to fix a bug or add a feature, first consider whether the change reveals a deeper architectural issue. Prefer fixing the root cause over patching symptoms. If a small fix would fragment logic across multiple places, propose a broader refactor instead.
+- **Avoid tunnel vision.** Don't just implement the literal request — evaluate whether it fits the existing patterns. If it doesn't, flag it and suggest an approach that does.
+- **Check for event patterns.** Many cross-cutting concerns (timer reset, display update) are handled via events (`WordChanged`, `PlaybackCommand`, `TabSelect`). If you're adding logic that reacts to state changes, check if there's already an event you should hook into rather than duplicating logic.

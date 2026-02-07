@@ -109,7 +109,7 @@ pub fn new_tab_dialog_system(
                     let tab_count = tabs.iter().count();
                     let name = format!("Text {}", tab_count + 1);
                     
-                        commands.trigger(TabCreateRequest::new(name,words));
+                    commands.trigger(TabCreateRequest::new(name, words));
                     
                     dialog.open = false;
                     dialog.text_input.clear();
