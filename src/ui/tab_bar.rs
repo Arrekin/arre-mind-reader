@@ -17,7 +17,7 @@ pub fn tab_bar_system(
 ) {
     let Ok(ctx) = contexts.ctx_mut() else { return };
     
-    let tab_info: Vec<(Entity, Name, bool)> = tab_order.0.iter()
+    let tab_info: Vec<(Entity, Name, bool)> = tab_order.entities().iter()
         .filter_map(|&entity| {
             tabs.get(entity).ok().map(|(name, is_active)| (entity, name.clone(), is_active))
         })

@@ -52,9 +52,9 @@ impl PlaybackCommand {
                     match current_state.get() {
                         ReadingState::Playing => next_state.set(ReadingState::Paused),
                         _ => {
-                            let has_words = active_tabs.single()
-                                .is_ok_and(|(_, words_mgr)| !words_mgr.words.is_empty());
-                            if has_words {
+                            let can_play = active_tabs.single()
+                                .is_ok_and(|(_, words_mgr)| words_mgr.has_words());
+                            if can_play {
                                 next_state.set(ReadingState::Playing);
                             }
                         }
@@ -65,19 +65,17 @@ impl PlaybackCommand {
                 }
                 PlaybackCommand::Restart => {
                     if let Ok((_, mut words_mgr)) = active_tabs.single_mut() {
-                        words_mgr.current_index = 0;
+                        words_mgr.restart();
                     }
                 }
                 PlaybackCommand::SkipForward(amount) => {
                     if let Ok((_, mut words_mgr)) = active_tabs.single_mut() {
-                        let word_count = words_mgr.words.len();
-                        words_mgr.current_index = (words_mgr.current_index + *amount)
-                            .min(word_count.saturating_sub(1));
+                        words_mgr.skip_forward(*amount);
                     }
                 }
                 PlaybackCommand::SkipBackward(amount) => {
                     if let Ok((_, mut words_mgr)) = active_tabs.single_mut() {
-                        words_mgr.current_index = words_mgr.current_index.saturating_sub(*amount);
+                        words_mgr.skip_backward(*amount);
                     }
                 }
                 PlaybackCommand::AdjustWpm(delta) => {

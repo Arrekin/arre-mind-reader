@@ -11,6 +11,8 @@ use crate::fonts::FontsStore;
 use crate::reader::FONT_SIZE_DEFAULT;
 use crate::tabs::{ActiveTab, TabFontSettings, WordsManager};
 
+/// Approximate ratio of character width to font size for monospace-like positioning.
+/// Used to offset left/right text so they abut the center ORP character.
 const CHAR_WIDTH_RATIO: f32 = 0.6;
 
 pub struct OrpPlugin;
@@ -121,21 +123,21 @@ fn update_word_display(
     right_texts: Single<(&mut Text2d, &mut TextFont, &mut Transform), (With<RightTextMarker>, Without<LeftTextMarker>, Without<CenterTextMarker>)>,
 ) {
     let Ok((font_settings, words_mgr)) = active_tabs.single() else { return };
-    if words_mgr.words.is_empty() {
-        return;
-    }
-    
-    let index = words_mgr.current_index.min(words_mgr.words.len().saturating_sub(1));
-    let word = &words_mgr.words[index];
+    let Some(word) = words_mgr.current_word() else { return };
     let chars: Vec<char> = word.text.chars().collect();
     let orp_index = word.orp_index();
     
+    // Split word into three parts around the ORP letter. The center char stays at x=0,
+    // left text grows rightward toward center (Anchor::CenterRight), and right text
+    // grows leftward away from center (Anchor::CenterLeft).
     let left: String = chars[..orp_index].iter().collect();
     let center: String = chars.get(orp_index).map(|c| c.to_string()).unwrap_or_default();
     let right: String = chars.get(orp_index + 1..).map(|s| s.iter().collect()).unwrap_or_default();
     
     let font_handle = font_settings.font_handle.clone();
     let font_size = font_settings.font_size;
+    // half_char = half the estimated width of the center character,
+    // so left/right text edges meet the center character's edges.
     let half_char = font_size * CHAR_WIDTH_RATIO * 0.5;
     
     let (mut text, mut font, mut transform) = left_texts.into_inner();

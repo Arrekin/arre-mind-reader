@@ -32,8 +32,7 @@ pub fn controls_system(
                 }
                 
                 // Progress
-                let total = words_mgr.words.len();
-                let current = words_mgr.current_index + 1;
+                let (current, total) = words_mgr.progress();
                 ui.label(format!("{}/{}", current, total));
                 
                 // Progress bar

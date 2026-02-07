@@ -154,6 +154,7 @@ fn persist_program_state(
         Has<ActiveTab>,
     ), With<TabMarker>>,
 ) {
+    // Save on periodic timer OR on app exit, whichever comes first
     save_timer.timer.tick(time.delta());
     if !save_timer.timer.just_finished() && app_exit_events.is_empty() { return; }
 

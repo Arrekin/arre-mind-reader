@@ -37,18 +37,20 @@ pub enum ReadingState {
     Paused,
 }
 impl ReadingState {
+    /// Sets the initial timer for the current word when entering Playing state.
     fn on_start_playing(
         mut timer: ResMut<ReadingTimer>,
         active_tab: Single<(&TabWpm, &WordsManager), With<ActiveTab>>,
     ) {
         let (tab_wpm, words_mgr) = active_tab.into_inner();
-        if !words_mgr.words.is_empty() {
-            let word = &words_mgr.words[words_mgr.current_index];
+        if let Some(word) = words_mgr.current_word() {
             let delay = Duration::from_millis(word.display_duration_ms(tab_wpm.0));
             timer.timer = Timer::new(delay, TimerMode::Once);
         }
     }
 
+    /// Advances words when the per-word timer expires. Each word gets a fresh
+    /// one-shot timer based on its display_duration_ms (varies by punctuation, length, etc.).
     fn tick(
         time: Res<Time>,
         mut timer: ResMut<ReadingTimer>,
@@ -60,9 +62,8 @@ impl ReadingState {
         timer.timer.tick(time.delta());
         
         if timer.timer.just_finished() {
-            if words_mgr.current_index + 1 < words_mgr.words.len() {
-                words_mgr.current_index += 1;
-                let word = &words_mgr.words[words_mgr.current_index];
+            if words_mgr.advance() {
+                let word = words_mgr.current_word().unwrap();
                 let delay = Duration::from_millis(word.display_duration_ms(tab_wpm.0));
                 timer.timer = Timer::new(delay, TimerMode::Once);
             } else {

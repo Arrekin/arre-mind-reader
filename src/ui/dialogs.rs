@@ -56,6 +56,8 @@ pub fn new_tab_dialog_system(
         .show(ctx, |ui| {
             ui.horizontal(|ui| {
                 let btn = ui.add_enabled(!is_loading, egui::Button::new("📂 Load from File"));
+                // File dialog is async to avoid blocking the main thread.
+                // Task is spawned here, polled separately in poll_file_load_task.
                 if btn.clicked() {
                     let task_pool = AsyncComputeTaskPool::get();
                     let task = task_pool.spawn(async move {
@@ -102,6 +104,7 @@ pub fn new_tab_dialog_system(
             ui.horizontal(|ui| {
                 let can_create = !dialog.text_input.trim().is_empty() && !is_loading;
                 if ui.add_enabled(can_create, egui::Button::new("Create Tab")).clicked() {
+                    // Pasted text has no file path, so we always use TxtParser
                     let words = TxtParser.parse(&dialog.text_input);
                     let tab_count = tabs.iter().count();
                     let name = format!("Text {}", tab_count + 1);

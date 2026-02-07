@@ -28,13 +28,25 @@ impl Plugin for TabsPlugin {
 // ============================================================================
 
 /// Maintains ordered list of tab entities for consistent UI display.
+/// Automatically updated via lifecycle observers on `TabMarker`.
 #[derive(Resource, Default)]
-pub struct TabOrder(pub Vec<Entity>);
+pub struct TabOrder(Vec<Entity>);
 impl TabOrder {
+    pub fn entities(&self) -> &[Entity] {
+        &self.0
+    }
+    /// Returns the adjacent tab to `target`, preferring next then previous.
+    /// Excludes `target` itself from the result (safe for close-then-select).
+    pub fn find_adjacent(&self, target: Entity) -> Option<Entity> {
+        let idx = self.0.iter().position(|&e| e == target)?;
+        self.0.get(idx + 1)
+            .or_else(|| idx.checked_sub(1).and_then(|i| self.0.get(i)))
+            .filter(|&&e| e != target)
+            .copied()
+    }
     fn on_tab_added(trigger: On<Add, TabMarker>, mut order: ResMut<TabOrder>) {
         order.0.push(trigger.event_target());
     }
-
     fn on_tab_removed(trigger: On<Remove, TabMarker>, mut order: ResMut<TabOrder>) {
         order.0.retain(|&e| e != trigger.event_target());
     }
@@ -68,6 +80,37 @@ pub struct TabFilePath(pub PathBuf);
 pub struct WordsManager {
     pub words: Vec<Word>,
     pub current_index: usize,
+}
+impl WordsManager {
+    pub fn has_words(&self) -> bool {
+        !self.words.is_empty()
+    }
+    pub fn current_word(&self) -> Option<&Word> {
+        self.words.get(self.current_index)
+    }
+    /// Returns (current_1indexed, total) for UI display.
+    pub fn progress(&self) -> (usize, usize) {
+        (self.current_index + 1, self.words.len())
+    }
+    pub fn skip_forward(&mut self, amount: usize) {
+        self.current_index = (self.current_index + amount)
+            .min(self.words.len().saturating_sub(1));
+    }
+    pub fn skip_backward(&mut self, amount: usize) {
+        self.current_index = self.current_index.saturating_sub(amount);
+    }
+    pub fn restart(&mut self) {
+        self.current_index = 0;
+    }
+    /// Advances to next word. Returns true if advanced, false if at end.
+    pub fn advance(&mut self) -> bool {
+        if self.current_index + 1 < self.words.len() {
+            self.current_index += 1;
+            true
+        } else {
+            false
+        }
+    }
 }
 
 // ============================================================================
@@ -121,14 +164,8 @@ impl TabClose {
         
         // If closed tab was active, select adjacent tab from ordered list
         if was_active {
-            if let Some(idx) = tab_order.0.iter().position(|&e| e == target) {
-                // Prefer next tab, fall back to previous, skip the one being despawned
-                let next = tab_order.0.get(idx + 1)
-                    .or_else(|| idx.checked_sub(1).and_then(|i| tab_order.0.get(i)))
-                    .filter(|&&e| e != target);
-                if let Some(&entity) = next {
-                    commands.trigger(TabSelect { entity });
-                }
+            if let Some(entity) = tab_order.find_adjacent(target) {
+                commands.trigger(TabSelect { entity });
             }
         }
     }
@@ -198,6 +235,7 @@ impl TabCreateRequest {
             }
         }
         
+        // Resolve font: try requested name → fall back to first available font
         let font_data = trigger.font_name.as_ref()
             .and_then(|name| fonts.get_by_name(name))
             .or_else(|| fonts.default_font());

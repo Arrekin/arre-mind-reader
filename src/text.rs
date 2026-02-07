@@ -15,6 +15,12 @@ pub struct Word {
 }
 
 impl Word {
+    pub fn new(text: impl Into<String>) -> Self {
+        Self { text: text.into(), is_paragraph_end: false }
+    }
+
+    /// Returns the character index the eye should fixate on (slightly left-of-center).
+    /// Based on RSVP research: longer words need the fixation point further in.
     pub fn orp_index(&self) -> usize {
         match self.text.chars().count() {
             0 => 0,
@@ -26,6 +32,8 @@ impl Word {
         }
     }
     
+    /// Uses max-wins strategy for multipliers (not cumulative), so a sentence-ending
+    /// long word gets the sentence-end pause, not sentence-end × long-word.
     pub fn display_duration_ms(&self, wpm: u32) -> u64 {
         let base_ms = 60_000.0 / wpm as f64;
         let mut multiplier = 1.0f64;
@@ -68,21 +76,18 @@ impl TextParser for TxtParser {
         let mut words: Vec<Word> = Vec::new();
         
         for line in content.lines() {
-            let trimmed = line.trim();
+            let trimmed_line = line.trim();
             
-            if trimmed.is_empty() {
+            // Blank line = paragraph break. Mark the *last* word before the gap
+            // so the reading pause happens at the end of the paragraph, not the start of the next.
+            if trimmed_line.is_empty() {
                 if let Some(last) = words.last_mut() {
                     last.is_paragraph_end = true;
                 }
                 continue;
             }
             
-            for word_text in trimmed.split_whitespace() {
-                words.push(Word {
-                    text: word_text.to_string(),
-                    is_paragraph_end: false,
-                });
-            }
+            words.extend(trimmed_line.split_whitespace().map(Word::new));
         }
         
         words
