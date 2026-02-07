@@ -23,12 +23,14 @@ pub fn controls_system(
     egui::TopBottomPanel::bottom("controls").show(ctx, |ui| {
         ui.horizontal(|ui| {
             if let Ok((entity, tab_wpm, font_settings, words_mgr)) = active_tabs.single() {
-                let btn_text = match current_state.get() {
-                    ReadingState::Playing => "⏸ Pause",
-                    _ => "▶ Play",
+                let at_end = words_mgr.has_words() && words_mgr.is_at_end();
+                let (btn_text, btn_cmd) = match (current_state.get(), at_end) {
+                    (ReadingState::Playing, _) => ("⏸ Pause", PlaybackCommand::TogglePlayPause),
+                    (ReadingState::Idle, true) => ("↺ Restart", PlaybackCommand::Restart),
+                    _ => ("▶ Play", PlaybackCommand::TogglePlayPause),
                 };
                 if ui.button(btn_text).clicked() {
-                    commands.trigger(PlaybackCommand::TogglePlayPause);
+                    commands.trigger(btn_cmd);
                 }
                 
                 // Progress

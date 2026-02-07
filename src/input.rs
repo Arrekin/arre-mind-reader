@@ -3,6 +3,7 @@
 //! Handles play/pause, navigation, and WPM adjustment via keyboard shortcuts.
 
 use bevy::prelude::*;
+use bevy_egui::EguiContexts;
 
 use crate::playback::PlaybackCommand;
 use crate::reader::WPM_STEP;
@@ -19,7 +20,12 @@ impl Plugin for InputPlugin {
 fn handle_input(
     mut commands: Commands,
     keyboard: Res<ButtonInput<KeyCode>>,
+    mut contexts: EguiContexts,
 ) {
+    if contexts.ctx_mut().is_ok_and(|ctx| ctx.wants_keyboard_input()) {
+        return;
+    }
+
     // Space: toggle play/pause
     if keyboard.just_pressed(KeyCode::Space) {
         commands.trigger(PlaybackCommand::TogglePlayPause);

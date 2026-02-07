@@ -103,6 +103,9 @@ impl WordsManager {
     pub fn restart(&mut self) {
         self.current_index = 0;
     }
+    pub fn is_at_end(&self) -> bool {
+        self.current_index + 1 >= self.words.len()
+    }
     /// Advances to next word. Returns true if advanced, false if at end.
     pub fn advance(&mut self) -> bool {
         if self.current_index + 1 < self.words.len() {

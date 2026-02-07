@@ -7,8 +7,7 @@ use bevy::color::palettes::css::RED;
 use bevy::prelude::*;
 use bevy::sprite::Anchor;
 
-use crate::fonts::FontsStore;
-use crate::reader::{FONT_SIZE_DEFAULT, WordChanged};
+use crate::reader::WordChanged;
 use crate::tabs::{ActiveTab, TabFontChanged, WordsManager};
 
 /// Approximate ratio of character width to font size for monospace-like positioning.
@@ -51,13 +50,9 @@ struct ReticleMarker;
 
 fn setup_orp_display(
     mut commands: Commands,
-    fonts: Res<FontsStore>,
 ) {
     let reticle_color = RED.with_alpha(RETICLE_ALPHA);
     let reticle_size = Vec2::new(RETICLE_WIDTH, RETICLE_HEIGHT);
-    let font_size = FONT_SIZE_DEFAULT;
-    let font = fonts.default_font().map(|f| f.handle.clone()).unwrap_or_default();
-    let half_char = font_size * CHAR_WIDTH_RATIO * 0.5;
     
     // Top reticle
     commands.spawn((
@@ -75,42 +70,24 @@ fn setup_orp_display(
     // Left text - right edge touches left edge of center char
     commands.spawn((
         Text2d::new(""),
-        TextFont {
-            font: font.clone(),
-            font_size,
-            ..default()
-        },
         TextColor(Color::WHITE),
         Anchor::CENTER_RIGHT,
-        Transform::from_xyz(-half_char, 0.0, 0.0),
         OrpSegment::Left,
     ));
     
     // Center text (ORP letter) - fixed at x=0, aligned with reticles
     commands.spawn((
         Text2d::new(""),
-        TextFont {
-            font: font.clone(),
-            font_size,
-            ..default()
-        },
         TextColor(RED.into()),
         Anchor::CENTER,
-        Transform::from_xyz(0.0, 0.0, 0.0),
         OrpSegment::Center,
     ));
     
     // Right text - left edge touches right edge of center char
     commands.spawn((
         Text2d::new(""),
-        TextFont {
-            font,
-            font_size,
-            ..default()
-        },
         TextColor(Color::WHITE),
         Anchor::CENTER_LEFT,
-        Transform::from_xyz(half_char, 0.0, 0.0),
         OrpSegment::Right,
     ));
 }
