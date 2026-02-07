@@ -89,7 +89,7 @@ impl WordsManager {
     pub fn current_word(&self) -> Option<&Word> {
         self.words.get(self.current_index)
     }
-    /// Returns (current_1indexed, total) for UI display.
+    /// Returns (current 1-indexed, total) for UI display.
     pub fn progress(&self) -> (usize, usize) {
         (self.current_index + 1, self.words.len())
     }
@@ -108,7 +108,7 @@ impl WordsManager {
     }
     /// Advances to next word. Returns true if advanced, false if at end.
     pub fn advance(&mut self) -> bool {
-        if self.current_index + 1 < self.words.len() {
+        if !self.is_at_end() {
             self.current_index += 1;
             true
         } else {
