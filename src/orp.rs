@@ -35,14 +35,12 @@ const RETICLE_ALPHA: f32 = 0.5;
 // Components
 // ============================================================================
 
-#[derive(Component)]
-struct LeftTextMarker;
-
-#[derive(Component)]
-struct CenterTextMarker;
-
-#[derive(Component)]
-struct RightTextMarker;
+#[derive(Component, PartialEq)]
+enum OrpSegment {
+    Left,
+    Center,
+    Right,
+}
 
 #[derive(Component)]
 struct ReticleMarker;
@@ -85,7 +83,7 @@ fn setup_orp_display(
         TextColor(Color::WHITE),
         Anchor::CENTER_RIGHT,
         Transform::from_xyz(-half_char, 0.0, 0.0),
-        LeftTextMarker,
+        OrpSegment::Left,
     ));
     
     // Center text (ORP letter) - fixed at x=0, aligned with reticles
@@ -99,7 +97,7 @@ fn setup_orp_display(
         TextColor(RED.into()),
         Anchor::CENTER,
         Transform::from_xyz(0.0, 0.0, 0.0),
-        CenterTextMarker,
+        OrpSegment::Center,
     ));
     
     // Right text - left edge touches right edge of center char
@@ -113,16 +111,14 @@ fn setup_orp_display(
         TextColor(Color::WHITE),
         Anchor::CENTER_LEFT,
         Transform::from_xyz(half_char, 0.0, 0.0),
-        RightTextMarker,
+        OrpSegment::Right,
     ));
 }
 
 fn on_word_changed(
     _trigger: On<WordChanged>,
     active_tabs: Query<&WordsManager, With<ActiveTab>>,
-    left_texts: Single<&mut Text2d, (With<LeftTextMarker>, Without<CenterTextMarker>, Without<RightTextMarker>)>,
-    center_texts: Single<&mut Text2d, (With<CenterTextMarker>, Without<LeftTextMarker>, Without<RightTextMarker>)>,
-    right_texts: Single<&mut Text2d, (With<RightTextMarker>, Without<LeftTextMarker>, Without<CenterTextMarker>)>,
+    mut segments: Query<(&mut Text2d, &OrpSegment)>,
 ) {
     let Ok(words_mgr) = active_tabs.single() else { return };
     let Some(word) = words_mgr.current_word() else { return };
@@ -132,20 +128,22 @@ fn on_word_changed(
     // Split word into three parts around the ORP letter. The center char stays at x=0,
     // left text grows rightward toward center (Anchor::CenterRight), and right text
     // grows leftward away from center (Anchor::CenterLeft).
-    let left: String = chars[..orp_index].iter().collect();
-    let center: String = chars.get(orp_index).map(|c| c.to_string()).unwrap_or_default();
-    let right: String = chars.get(orp_index + 1..).map(|s| s.iter().collect()).unwrap_or_default();
+    let mut left: String = chars[..orp_index].iter().collect();
+    let mut center: String = chars.get(orp_index).map(|c| c.to_string()).unwrap_or_default();
+    let mut right: String = chars.get(orp_index + 1..).map(|s| s.iter().collect()).unwrap_or_default();
     
-    **left_texts.into_inner() = left;
-    **center_texts.into_inner() = center;
-    **right_texts.into_inner() = right;
+    for (mut text, segment) in &mut segments {
+        **text = match segment {
+            OrpSegment::Left => std::mem::take(&mut left),
+            OrpSegment::Center => std::mem::take(&mut center),
+            OrpSegment::Right => std::mem::take(&mut right),
+        };
+    }
 }
 
 fn on_font_changed(
     trigger: On<TabFontChanged>,
-    left_texts: Single<(&mut TextFont, &mut Transform), (With<LeftTextMarker>, Without<CenterTextMarker>, Without<RightTextMarker>)>,
-    center_texts: Single<&mut TextFont, (With<CenterTextMarker>, Without<LeftTextMarker>, Without<RightTextMarker>)>,
-    right_texts: Single<(&mut TextFont, &mut Transform), (With<RightTextMarker>, Without<LeftTextMarker>, Without<CenterTextMarker>)>,
+    mut segments: Query<(&mut TextFont, &mut Transform, &OrpSegment)>,
 ) {
     let font_handle = trigger.handle.clone();
     let font_size = trigger.size;
@@ -153,17 +151,13 @@ fn on_font_changed(
     // so left/right text edges meet the center character's edges.
     let half_char = font_size * CHAR_WIDTH_RATIO * 0.5;
     
-    let (mut font, mut transform) = left_texts.into_inner();
-    font.font_size = font_size;
-    font.font = font_handle.clone();
-    transform.translation.x = -half_char;
-    
-    let mut font = center_texts.into_inner();
-    font.font_size = font_size;
-    font.font = font_handle.clone();
-    
-    let (mut font, mut transform) = right_texts.into_inner();
-    font.font_size = font_size;
-    font.font = font_handle;
-    transform.translation.x = half_char;
+    for (mut font, mut transform, segment) in &mut segments {
+        font.font_size = font_size;
+        font.font = font_handle.clone();
+        match segment {
+            OrpSegment::Left => transform.translation.x = -half_char,
+            OrpSegment::Center => {},
+            OrpSegment::Right => transform.translation.x = half_char,
+        }
+    }
 }
