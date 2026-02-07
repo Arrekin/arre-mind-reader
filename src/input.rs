@@ -17,35 +17,35 @@ impl Plugin for InputPlugin {
 }
 
 fn handle_input(
+    mut commands: Commands,
     keyboard: Res<ButtonInput<KeyCode>>,
-    mut playback_cmds: MessageWriter<PlaybackCommand>,
 ) {
     // Space: toggle play/pause
     if keyboard.just_pressed(KeyCode::Space) {
-        playback_cmds.write(PlaybackCommand::TogglePlayPause);
+        commands.trigger(PlaybackCommand::TogglePlayPause);
     }
     
     // Escape: stop
     if keyboard.just_pressed(KeyCode::Escape) {
-        playback_cmds.write(PlaybackCommand::Stop);
+        commands.trigger(PlaybackCommand::Stop);
     }
     
     // R: restart
     if keyboard.just_pressed(KeyCode::KeyR) {
-        playback_cmds.write(PlaybackCommand::Restart);
+        commands.trigger(PlaybackCommand::Restart);
     }
     
     // Arrow keys: navigation and WPM
     if keyboard.just_pressed(KeyCode::ArrowLeft) {
-        playback_cmds.write(PlaybackCommand::skip_backward());
+        commands.trigger(PlaybackCommand::skip_backward());
     }
     if keyboard.just_pressed(KeyCode::ArrowRight) {
-        playback_cmds.write(PlaybackCommand::skip_forward());
+        commands.trigger(PlaybackCommand::skip_forward());
     }
     if keyboard.just_pressed(KeyCode::ArrowUp) {
-        playback_cmds.write(PlaybackCommand::AdjustWpm(WPM_STEP as i32));
+        commands.trigger(PlaybackCommand::AdjustWpm(WPM_STEP as i32));
     }
     if keyboard.just_pressed(KeyCode::ArrowDown) {
-        playback_cmds.write(PlaybackCommand::AdjustWpm(-(WPM_STEP as i32)));
+        commands.trigger(PlaybackCommand::AdjustWpm(-(WPM_STEP as i32)));
     }
 }

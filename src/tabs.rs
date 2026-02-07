@@ -17,6 +17,7 @@ impl Plugin for TabsPlugin {
             .add_observer(TabSelect::on_trigger)
             .add_observer(TabClose::on_trigger)
             .add_observer(TabCreateRequest::on_trigger)
+            .add_observer(TabFontChanged::on_trigger)
             .add_observer(TabOrder::on_tab_added)
             .add_observer(TabOrder::on_tab_removed)
             ;
@@ -127,6 +128,7 @@ impl TabSelect {
         trigger: On<TabSelect>,
         mut commands: Commands,
         active_tab: Option<Single<Entity, With<ActiveTab>>>,
+        font_settings: Query<&TabFontSettings>,
     ) {
         let target = trigger.entity;
         
@@ -135,6 +137,15 @@ impl TabSelect {
         }
         
         commands.entity(target).insert(ActiveTab);
+        
+        if let Ok(fs) = font_settings.get(target) {
+            commands.trigger(TabFontChanged {
+                entity: target,
+                name: fs.font_name.clone(),
+                handle: fs.font_handle.clone(),
+                size: fs.font_size,
+            });
+        }
         commands.trigger(WordChanged);
     }
 }
@@ -175,6 +186,26 @@ impl From<Entity> for TabClose {
     }
 }
 
+
+#[derive(EntityEvent)]
+pub struct TabFontChanged {
+    pub entity: Entity,
+    pub name: String,
+    pub handle: Handle<Font>,
+    pub size: f32,
+}
+impl TabFontChanged {
+    fn on_trigger(
+        trigger: On<TabFontChanged>,
+        mut tabs: Query<&mut TabFontSettings>,
+    ) {
+        if let Ok(mut font_settings) = tabs.get_mut(trigger.entity) {
+            font_settings.font_name = trigger.name.clone();
+            font_settings.font_handle = trigger.handle.clone();
+            font_settings.font_size = trigger.size;
+        }
+    }
+}
 
 #[derive(Event)]
 pub struct TabCreateRequest {

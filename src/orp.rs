@@ -8,8 +8,8 @@ use bevy::prelude::*;
 use bevy::sprite::Anchor;
 
 use crate::fonts::FontsStore;
-use crate::reader::FONT_SIZE_DEFAULT;
-use crate::tabs::{ActiveTab, TabFontSettings, WordsManager};
+use crate::reader::{FONT_SIZE_DEFAULT, WordChanged};
+use crate::tabs::{ActiveTab, TabFontChanged, WordsManager};
 
 /// Approximate ratio of character width to font size for monospace-like positioning.
 /// Used to offset left/right text so they abut the center ORP character.
@@ -20,7 +20,8 @@ impl Plugin for OrpPlugin {
     fn build(&self, app: &mut App) {
         app
             .add_systems(Startup, setup_orp_display)
-            .add_systems(Update, update_word_display)
+            .add_observer(on_word_changed)
+            .add_observer(on_font_changed)
             ;
     }
 }
@@ -116,13 +117,14 @@ fn setup_orp_display(
     ));
 }
 
-fn update_word_display(
-    active_tabs: Query<(&TabFontSettings, &WordsManager), With<ActiveTab>>,
-    left_texts: Single<(&mut Text2d, &mut TextFont, &mut Transform), (With<LeftTextMarker>, Without<CenterTextMarker>, Without<RightTextMarker>)>,
-    center_texts: Single<(&mut Text2d, &mut TextFont), (With<CenterTextMarker>, Without<LeftTextMarker>, Without<RightTextMarker>)>,
-    right_texts: Single<(&mut Text2d, &mut TextFont, &mut Transform), (With<RightTextMarker>, Without<LeftTextMarker>, Without<CenterTextMarker>)>,
+fn on_word_changed(
+    _trigger: On<WordChanged>,
+    active_tabs: Query<&WordsManager, With<ActiveTab>>,
+    left_texts: Single<&mut Text2d, (With<LeftTextMarker>, Without<CenterTextMarker>, Without<RightTextMarker>)>,
+    center_texts: Single<&mut Text2d, (With<CenterTextMarker>, Without<LeftTextMarker>, Without<RightTextMarker>)>,
+    right_texts: Single<&mut Text2d, (With<RightTextMarker>, Without<LeftTextMarker>, Without<CenterTextMarker>)>,
 ) {
-    let Ok((font_settings, words_mgr)) = active_tabs.single() else { return };
+    let Ok(words_mgr) = active_tabs.single() else { return };
     let Some(word) = words_mgr.current_word() else { return };
     let chars: Vec<char> = word.text.chars().collect();
     let orp_index = word.orp_index();
@@ -134,25 +136,33 @@ fn update_word_display(
     let center: String = chars.get(orp_index).map(|c| c.to_string()).unwrap_or_default();
     let right: String = chars.get(orp_index + 1..).map(|s| s.iter().collect()).unwrap_or_default();
     
-    let font_handle = font_settings.font_handle.clone();
-    let font_size = font_settings.font_size;
+    **left_texts.into_inner() = left;
+    **center_texts.into_inner() = center;
+    **right_texts.into_inner() = right;
+}
+
+fn on_font_changed(
+    trigger: On<TabFontChanged>,
+    left_texts: Single<(&mut TextFont, &mut Transform), (With<LeftTextMarker>, Without<CenterTextMarker>, Without<RightTextMarker>)>,
+    center_texts: Single<&mut TextFont, (With<CenterTextMarker>, Without<LeftTextMarker>, Without<RightTextMarker>)>,
+    right_texts: Single<(&mut TextFont, &mut Transform), (With<RightTextMarker>, Without<LeftTextMarker>, Without<CenterTextMarker>)>,
+) {
+    let font_handle = trigger.handle.clone();
+    let font_size = trigger.size;
     // half_char = half the estimated width of the center character,
     // so left/right text edges meet the center character's edges.
     let half_char = font_size * CHAR_WIDTH_RATIO * 0.5;
     
-    let (mut text, mut font, mut transform) = left_texts.into_inner();
-    **text = left;
+    let (mut font, mut transform) = left_texts.into_inner();
     font.font_size = font_size;
     font.font = font_handle.clone();
     transform.translation.x = -half_char;
     
-    let (mut text, mut font) = center_texts.into_inner();
-    **text = center;
+    let mut font = center_texts.into_inner();
     font.font_size = font_size;
     font.font = font_handle.clone();
     
-    let (mut text, mut font, mut transform) = right_texts.into_inner();
-    **text = right;
+    let (mut font, mut transform) = right_texts.into_inner();
     font.font_size = font_size;
     font.font = font_handle;
     transform.translation.x = half_char;

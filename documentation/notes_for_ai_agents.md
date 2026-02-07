@@ -15,7 +15,8 @@ See `work.md` in the project root for tracked bugs, refactors, and deferred item
 - **ORP (Optical Recognition Point):** The letter the eye fixates on, positioned at screen center (0,0). Research shows slightly left-of-center is optimal.
 - **Monospace fonts only.** The ORP positioning uses a fixed `CHAR_WIDTH_RATIO` (0.6) to estimate character width. Proportional fonts will misalign. This is intentional — RSVP works best with monospace.
 - **Per-tab settings.** Font and WPM are stored per-tab, not globally. ORP highlight color is hardcoded red.
-- **WordChanged event.** A `WordChanged` trigger (in `reader.rs`) is fired whenever the current word changes — by tick advance, skip, restart, or tab switch. A single observer resets `ReadingTimer` to the new word's display duration. This decouples word navigation from timer management. All code that changes the current word must trigger `WordChanged`.
+- **WordChanged event.** A `WordChanged` trigger (in `reader.rs`) is fired whenever the current word changes — by tick advance, skip, restart, or tab switch. Observers reset `ReadingTimer` and update ORP text content. All code that changes the current word must trigger `WordChanged`.
+- **TabFontChanged event.** An `EntityEvent` carrying font name, handle, and size. Fired by: (1) UI font selector, (2) `TabSelect` cascade on tab switch. Two observers react: one applies changes to `TabFontSettings` component, one updates ORP display entities (font + positions).
 - **Centralized tab creation.** All tab creation goes through `TabCreateRequest` (with builder pattern). Both persistence restore and UI dialogs trigger this event — never spawn tab entities manually.
 - **Encapsulation.** `WordsManager` and `TabOrder` expose methods for their operations. Use the API (e.g. `advance()`, `current_word()`, `find_adjacent()`) instead of accessing their fields directly.
 - **Paragraph detection.** Blank lines in source text mark the *last word before the gap* as `is_paragraph_end`, not the first word after. This ensures the reading pause happens at the end of the paragraph.
@@ -28,8 +29,8 @@ Each file follows: imports → Plugin definition → constants → types/compone
 - `main.rs` - App entry, plugin registration, camera spawn
 - `reader.rs` - `ReaderPlugin` orchestrates sub-plugins, owns `ReadingState` (Idle/Playing/Paused), `ReadingTimer`, and `WordChanged` event+observer. Per-word timing: each word gets a one-shot timer based on its `display_duration_ms`
 - `tabs.rs` - `TabsPlugin` with tab components, `TabOrder` resource, `WordsManager` component, entity events (`TabSelect`, `TabClose`), `TabCreateRequest` event, and lifecycle observers
-- `playback.rs` - `PlaybackCommand` message enum with `PlaybackCommand::process` system
-- `orp.rs` - ORP display: three `Text2d` entities (left/center/right) split around the fixation letter. Positions recomputed each frame from active tab's font size
+- `playback.rs` - `PlaybackCommand` event enum with `PlaybackCommand::on_trigger` observer
+- `orp.rs` - ORP display: three `Text2d` entities (left/center/right) split around the fixation letter. Fully reactive — `on_word_changed` observer updates text content, `on_font_changed` observer updates font and positions
 - `input.rs` - Keyboard → `PlaybackCommand` mapping
 - `text.rs` - `Word` struct, `TextParser` trait, `TxtParser`, `get_parser_for_path()` registry
 - `fonts.rs` - `FontsStore` resource, scans `assets/fonts` at startup
@@ -38,10 +39,11 @@ Each file follows: imports → Plugin definition → constants → types/compone
 
 ## ECS Event Patterns
 - **Tab lifecycle:** `EntityEvent` structs (`TabSelect`, `TabClose`) with observers. `TabOrder` auto-updates via `Add`/`Remove` observers on `TabMarker`.
-- **Playback:** `Message` enum (`PlaybackCommand`) with `MessageWriter`/`MessageReader`
-- **Word lifecycle:** `WordChanged` trigger (global `Event`) fired after any word navigation. Observer in `reader.rs` resets the reading timer.
-- **UI → state:** UI emits events/commands, observers and systems react. Exception: `controls_system` directly mutates `TabWpm`/`TabFontSettings` for continuous sliders (intentional, will be reworked).
-- **Bevy 0.18 naming:** `Message`/`MessageWriter`/`MessageReader` for buffered events (not `Event`/`EventWriter`/`EventReader`)
+- **Playback:** `Event` trigger (`PlaybackCommand`) with observer
+- **Word lifecycle:** `WordChanged` trigger (global `Event`) fired after any word navigation. Observer in `reader.rs` resets the reading timer. Observer in `orp.rs` updates display text.
+- **Font lifecycle:** `TabFontChanged` `EntityEvent` targeting a tab entity. Observer in `tabs.rs` applies to `TabFontSettings`. Observer in `orp.rs` updates display font/positions. `TabSelect` cascades this on tab switch.
+- **UI → state:** UI emits events/triggers, observers react. No direct component mutation in UI systems.
+- **Bevy 0.18 naming:** `Message`/`MessageWriter`/`MessageReader` for buffered events (not `Event`/`EventWriter`/`EventReader`). `Event` + `commands.trigger()` for immediate observer-based dispatch.
 
 ## Dependencies
 - `bevy` 0.18 - Game engine
