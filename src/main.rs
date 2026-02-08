@@ -35,10 +35,15 @@ fn main() {
         )
         .add_plugins(EguiPlugin::default())
         .add_plugins((
-            fonts::FontsPlugin, 
-            reader::ReaderPlugin, 
-            persistence::PersistencePlugin, 
-            ui::UiPlugin
+            text::TextPlugin,
+            fonts::FontsPlugin,
+            tabs::TabsPlugin,
+            reader::ReaderPlugin,
+            playback::PlaybackPlugin,
+            input::InputPlugin,
+            orp::OrpPlugin,
+            persistence::PersistencePlugin,
+            ui::UiPlugin,
         ))
         .add_systems(Startup, setup)
         .run();

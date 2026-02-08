@@ -8,7 +8,7 @@ use bevy_egui::{EguiContexts, egui};
 use std::path::Path;
 
 use crate::tabs::{TabCreateRequest, TabMarker};
-use crate::text::{TxtParser, TextParser, Word, get_parser_for_path};
+use crate::text::FileParsers;
 
 // ============================================================================
 // Resources
@@ -22,13 +22,12 @@ pub struct NewTabDialog {
 
 #[derive(Resource, Default)]
 pub struct PendingFileLoad {
-    pub task: Option<Task<Option<FileLoadResult>>>,
+    pub task: Option<Task<Option<RawFileLoad>>>,
 }
 
-pub struct FileLoadResult {
+pub struct RawFileLoad {
     pub file_name: String,
-    pub tab_name: String,
-    pub words: Vec<Word>,
+    pub bytes: Vec<u8>,
 }
 
 // ============================================================================
@@ -40,6 +39,7 @@ pub fn new_tab_dialog_system(
     mut contexts: EguiContexts,
     mut dialog: ResMut<NewTabDialog>,
     mut pending_load: ResMut<PendingFileLoad>,
+    file_parsers: Res<FileParsers>,
     tabs: Query<Entity, With<TabMarker>>,
 ) {
     if !dialog.open {
@@ -59,25 +59,19 @@ pub fn new_tab_dialog_system(
                 // File dialog is async to avoid blocking the main thread.
                 // Task is spawned here, polled separately in poll_file_load_task.
                 if btn.clicked() {
+                    let extensions = file_parsers.supported_extensions();
                     let task_pool = AsyncComputeTaskPool::get();
                     let task = task_pool.spawn(async move {
+                        let ext_refs: Vec<&str> = extensions.iter().map(|s| s.as_str()).collect();
                         let file_handle = rfd::AsyncFileDialog::new()
-                            .add_filter("Text files", &["txt"])
+                            .add_filter("Supported files", &ext_refs)
                             .pick_file()
                             .await?;
                         
                         let file_name = file_handle.file_name();
                         let bytes = file_handle.read().await;
-                        let content = String::from_utf8(bytes).ok()?;
-                        let parser = get_parser_for_path(Path::new(&file_name))?;
-                        let tab_name = Path::new(&file_name)
-                            .file_stem()
-                            .and_then(|s| s.to_str())
-                            .unwrap_or("Untitled")
-                            .to_string();
-                        let words = parser.parse(&content);
                         
-                        Some(FileLoadResult { file_name, tab_name, words })
+                        Some(RawFileLoad { file_name, bytes })
                     });
                     pending_load.task = Some(task);
                 }
@@ -106,12 +100,12 @@ pub fn new_tab_dialog_system(
             ui.horizontal(|ui| {
                 let can_create = !dialog.text_input.trim().is_empty() && !is_loading;
                 if ui.add_enabled(can_create, egui::Button::new("Create Tab")).clicked() {
-                    // Pasted text has no file path, so we always use TxtParser
-                    let words = TxtParser.parse(&dialog.text_input);
+                    let parser = file_parsers.get_for_extension("txt").unwrap();
+                    let parsed = parser.parse(dialog.text_input.as_bytes()).unwrap();
                     let tab_count = tabs.iter().count();
                     let name = format!("Text {}", tab_count + 1);
                     
-                    commands.trigger(TabCreateRequest::new(name, words));
+                    commands.trigger(TabCreateRequest::new(name, parsed.words));
                     
                     dialog.open = false;
                     dialog.text_input.clear();
@@ -130,13 +124,34 @@ pub fn poll_file_load_task(
     mut commands: Commands,
     mut pending_load: ResMut<PendingFileLoad>,
     mut dialog: ResMut<NewTabDialog>,
+    file_parsers: Res<FileParsers>,
 ) {
     let Some(task) = &mut pending_load.task else { return };
     
     if let Some(result) = block_on(poll_once(task)) {
-        if let Some(file_result) = result {
-            commands.trigger(TabCreateRequest::new(file_result.tab_name, file_result.words).with_file_path(file_result.file_name));
-            dialog.open = false;
+        if let Some(raw) = result {
+            let path = Path::new(&raw.file_name);
+            let tab_name = path.file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("Untitled")
+                .to_string();
+            
+            if let Some(parser) = file_parsers.get_for_path(path) {
+                match parser.parse(&raw.bytes) {
+                    Ok(parsed) => {
+                        commands.trigger(
+                            TabCreateRequest::new(tab_name, parsed.words)
+                                .with_file_path(raw.file_name)
+                        );
+                        dialog.open = false;
+                    }
+                    Err(e) => {
+                        warn!("Failed to parse '{}': {}", raw.file_name, e);
+                    }
+                }
+            } else {
+                warn!("No parser found for '{}'", raw.file_name);
+            }
         }
         pending_load.task = None;
     }

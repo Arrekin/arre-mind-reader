@@ -1,14 +1,9 @@
-//! Reader plugin - orchestrates the reading experience.
-//!
-//! Manages reading state transitions and timing.
+//! Reading state management and timing.
 
 use std::time::Duration;
 use bevy::prelude::*;
 
-use crate::input::InputPlugin;
-use crate::orp::OrpPlugin;
-use crate::playback::PlaybackPlugin;
-use crate::tabs::{ActiveTab, TabWpm, WordsManager, TabsPlugin};
+use crate::tabs::{ActiveTab, TabWpm, WordsManager};
 
 pub const WPM_DEFAULT: u32 = 300;
 pub const WPM_MIN: u32 = 100;
@@ -21,7 +16,6 @@ impl Plugin for ReaderPlugin {
     fn build(&self, app: &mut App) {
         app.init_state::<ReadingState>()
             .init_resource::<ReadingTimer>()
-            .add_plugins((OrpPlugin, InputPlugin, PlaybackPlugin, TabsPlugin))
             .add_systems(Update, ReadingState::tick.run_if(in_state(ReadingState::Playing)))
             .add_systems(OnEnter(ReadingState::Playing), ReadingState::on_start_playing)
             .add_observer(WordChanged::on_trigger)

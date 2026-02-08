@@ -27,12 +27,12 @@ See `work.md` in the project root for tracked bugs, refactors, and deferred item
 Each file follows: imports → Plugin definition → constants → types/components → systems
 
 - `main.rs` - App entry, plugin registration, camera spawn
-- `reader.rs` - `ReaderPlugin` orchestrates sub-plugins, owns `ReadingState` (Idle/Playing/Paused), `ReadingTimer`, and `WordChanged` event+observer. Per-word timing: each word gets a one-shot timer based on its `display_duration_ms`
+- `reader.rs` - `ReaderPlugin` owns `ReadingState` (Idle/Playing/Paused), `ReadingTimer`, and `WordChanged` event+observer. Per-word timing: each word gets a one-shot timer based on its `display_duration_ms`
 - `tabs.rs` - `TabsPlugin` with tab components, `TabOrder` resource, `WordsManager` component, entity events (`TabSelect`, `TabClose`), `TabCreateRequest` event, and lifecycle observers
 - `playback.rs` - `PlaybackCommand` event enum with `PlaybackCommand::on_trigger` observer
 - `orp.rs` - ORP display: three `Text2d` entities (left/center/right) split around the fixation letter. Fully reactive — `on_word_changed` observer updates text content, `on_font_changed` observer updates font and positions
 - `input.rs` - Keyboard → `PlaybackCommand` mapping
-- `text.rs` - `Word` struct, `TextParser` trait, `TxtParser`, `get_parser_for_path()` registry
+- `text.rs` - `TextPlugin`, `FileParsers` resource (extension→parser registry), `TextParser` trait, `TxtParser`, `EpubParser`, `words_from_text()` shared utility, `Word`/`ParseResult`/`Section` structs
 - `fonts.rs` - `FontsStore` resource, loads built-in fonts via `AssetServer` on all platforms; on native also discovers additional `.ttf`/`.otf` files in `assets/fonts/`
 - `persistence.rs` - RON save/load, periodic timer + app exit trigger, restores via `TabCreateRequest`
 - `ui/` - egui UI: `tab_bar.rs` (tab strip), `controls.rs` (playback/WPM/font), `dialogs.rs` (new tab dialog, async file load)
@@ -58,6 +58,8 @@ The app supports two build targets: **native** (Linux/macOS/Windows) and **WASM*
 - `bevy_egui` 0.39 - Egui integration
 - `serde` + `ron` - Persistence
 - `rfd` 0.15 - File dialogs (native + WASM with confirm() fallback)
+- `rbook` 0.6 - EPUB parsing (WASM-compatible)
+- `quick-xml` 0.37 - XHTML text extraction for EPUB content
 - `dirs` - Platform config directory (native only)
 - `gloo-storage` - localStorage wrapper (WASM only)
 - `web-sys` - Web API bindings (WASM only)
@@ -96,6 +98,18 @@ impl Plugin for InputPlugin {
 }
 ```
 No newline between struct and impl. Each app builder call on its own line. Trailing semicolon on its own line.
+
+### System code style
+Define system elements in tihs specific order(whichever are needed)
+```rust
+fn my_bevy_system(
+    trigger: Trigger<T>,
+    mut commands: Commands,
+    <resources>
+    <queries>
+    <locals>
+)
+```
 
 ### Coupling code style
 If a component/event represents a logical whole and owns specific systems, keep its systems within its impl block:
