@@ -206,7 +206,7 @@ impl EpubParser {
                 }
                 Ok(Event::Text(e)) => {
                     if skip_depth > 0 { continue; }
-                    if let Ok(decoded) = e.unescape() {
+                    if let Ok(decoded) = e.decode() {
                         text.push_str(&decoded);
                     }
                 }
