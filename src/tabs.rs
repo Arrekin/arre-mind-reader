@@ -5,6 +5,7 @@
 use bevy::prelude::*;
 
 use crate::fonts::FontsStore;
+use crate::persistence::ProgramState;
 use crate::reader::{FONT_SIZE_DEFAULT, WPM_DEFAULT, WordChanged};
 use crate::text::Word;
 
@@ -76,12 +77,21 @@ pub struct TabWpm(pub u32);
 #[derive(Component)]
 pub struct TabFilePath(pub String);
 
-#[derive(Component)]
-pub struct WordsManager {
+#[derive(Component, Clone)]
+pub struct Content {
+    pub content_cache_id: String,
     pub words: Vec<Word>,
     pub current_index: usize,
 }
-impl WordsManager {
+impl Content {
+    pub fn new(words: Vec<Word>) -> Self {
+        let content_cache_id = ProgramState::generate_cache_id();
+        ProgramState::write_word_cache(&content_cache_id, &words);
+        Self { content_cache_id, words, current_index: 0 }
+    }
+    pub fn new_from_loaded(content_cache_id: String, words: Vec<Word>, current_index: usize) -> Self {
+        Self { content_cache_id, words, current_index }
+    }
     pub fn has_words(&self) -> bool {
         !self.words.is_empty()
     }
@@ -167,14 +177,14 @@ impl TabClose {
         trigger: On<TabClose>,
         mut commands: Commands,
         tab_order: Res<TabOrder>,
-        tabs: Query<Has<ActiveTab>, With<TabMarker>>,
+        tabs: Query<(Has<ActiveTab>, &Content), With<TabMarker>>,
     ) {
         let target = trigger.entity;
-        let was_active = tabs.get(target).is_ok_and(|is_active| is_active);
-        
+        let Ok((was_active, content)) = tabs.get(target) else { return };
+
+        ProgramState::delete_word_cache(&content.content_cache_id);
         commands.entity(target).despawn();
         
-        // If closed tab was active, select adjacent tab from ordered list
         if was_active {
             if let Some(entity) = tab_order.find_adjacent(target) {
                 commands.trigger(TabSelect { entity });
@@ -212,24 +222,22 @@ impl TabFontChanged {
 #[derive(Event)]
 pub struct TabCreateRequest {
     pub name: String,
-    pub words: Vec<Word>,
+    pub content: Content,
     pub file_path: Option<String>,
     pub font_name: Option<String>,
     pub font_size: f32,
     pub wpm: u32,
-    pub current_index: usize,
     pub is_active: bool,
 }
 impl TabCreateRequest {
-    pub fn new(name: String, words: Vec<Word>) -> Self {
+    pub fn new(name: String, content: Content) -> Self {
         Self {
             name,
-            words,
+            content,
             file_path: None,
             font_name: None,
             font_size: FONT_SIZE_DEFAULT,
             wpm: WPM_DEFAULT,
-            current_index: 0,
             is_active: true,
         }
     }
@@ -244,10 +252,6 @@ impl TabCreateRequest {
     }
     pub fn with_wpm(mut self, wpm: u32) -> Self {
         self.wpm = wpm;
-        self
-    }
-    pub fn with_current_index(mut self, index: usize) -> Self {
-        self.current_index = index;
         self
     }
     pub fn with_active(mut self, active: bool) -> Self {
@@ -275,10 +279,7 @@ impl TabCreateRequest {
                 font_size: trigger.font_size,
             },
             TabWpm(trigger.wpm),
-            WordsManager {
-                words: trigger.words.clone(),
-                current_index: trigger.current_index,
-            },
+            trigger.content.clone(),
         ));
         
         if let Some(path) = &trigger.file_path {

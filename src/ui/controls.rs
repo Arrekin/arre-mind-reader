@@ -9,14 +9,14 @@ use bevy_egui::{EguiContexts, egui};
 use crate::fonts::FontsStore;
 use crate::playback::PlaybackCommand;
 use crate::reader::{ReadingState, WPM_MIN, WPM_MAX, WPM_STEP};
-use crate::tabs::{ActiveTab, TabFontChanged, TabFontSettings, TabWpm, WordsManager};
+use crate::tabs::{ActiveTab, Content, TabFontChanged, TabFontSettings, TabWpm};
 
 pub fn controls_system(
     mut commands: Commands,
     mut contexts: EguiContexts,
     current_state: Res<State<ReadingState>>,
     fonts: Res<FontsStore>,
-    active_tabs: Query<(Entity, &TabWpm, &TabFontSettings, &WordsManager), With<ActiveTab>>,
+    active_tabs: Query<(Entity, &TabWpm, &TabFontSettings, &Content), With<ActiveTab>>,
 ) {
     let Ok(ctx) = contexts.ctx_mut() else { return };
     

@@ -18,7 +18,7 @@ See `work.md` in the project root for tracked bugs, refactors, and deferred item
 - **WordChanged event.** A `WordChanged` trigger (in `reader.rs`) is fired whenever the current word changes — by tick advance, skip, restart, or tab switch. Observers reset `ReadingTimer` and update ORP text content. All code that changes the current word must trigger `WordChanged`.
 - **TabFontChanged event.** An `EntityEvent` carrying font name, handle, and size. Fired by: (1) UI font selector, (2) `TabSelect` cascade on tab switch. Two observers react: one applies changes to `TabFontSettings` component, one updates ORP display entities (font + positions).
 - **Centralized tab creation.** All tab creation goes through `TabCreateRequest` (with builder pattern). Both persistence restore and UI dialogs trigger this event — never spawn tab entities manually.
-- **Encapsulation.** `WordsManager` and `TabOrder` expose methods for their operations. Use the API (e.g. `advance()`, `current_word()`, `find_adjacent()`) instead of accessing their fields directly.
+- **Encapsulation.** `Content` and `TabOrder` expose methods for their operations. Use the API (e.g. `advance()`, `current_word()`, `find_adjacent()`) instead of accessing their fields directly.
 - **Paragraph detection.** Blank lines in source text mark the *last word before the gap* as `is_paragraph_end`, not the first word after. This ensures the reading pause happens at the end of the paragraph.
 - **Display duration uses max-wins multiplier** (not cumulative). A sentence-ending long word gets the sentence-end pause (×3.0), not sentence-end × long-word.
 - **Restart doesn't auto-play.** Pressing R resets `current_index` to 0 but doesn't change `ReadingState`. User must press Play separately. This is intentional to preserve user choice.
@@ -28,13 +28,13 @@ Each file follows: imports → Plugin definition → constants → types/compone
 
 - `main.rs` - App entry, plugin registration, camera spawn
 - `reader.rs` - `ReaderPlugin` owns `ReadingState` (Idle/Playing/Paused), `ReadingTimer`, and `WordChanged` event+observer. Per-word timing: each word gets a one-shot timer based on its `display_duration_ms`
-- `tabs.rs` - `TabsPlugin` with tab components, `TabOrder` resource, `WordsManager` component, entity events (`TabSelect`, `TabClose`), `TabCreateRequest` event, and lifecycle observers
+- `tabs.rs` - `TabsPlugin` with tab components, `TabOrder` resource, `Content` component (words + cache ID + cursor), entity events (`TabSelect`, `TabClose`), `TabCreateRequest` event, and lifecycle observers
 - `playback.rs` - `PlaybackCommand` event enum with `PlaybackCommand::on_trigger` observer
 - `orp.rs` - ORP display: three `Text2d` entities (left/center/right) split around the fixation letter. Fully reactive — `on_word_changed` observer updates text content, `on_font_changed` observer updates font and positions
 - `input.rs` - Keyboard → `PlaybackCommand` mapping
 - `text.rs` - `TextPlugin`, `FileParsers` resource (extension→parser registry), `TextParser` trait, `TxtParser`, `EpubParser`, `words_from_text()` shared utility, `Word`/`ParseResult`/`Section` structs
 - `fonts.rs` - `FontsStore` resource, loads built-in fonts via `AssetServer` on all platforms; on native also discovers additional `.ttf`/`.otf` files in `assets/fonts/`
-- `persistence.rs` - RON save/load, periodic timer + app exit trigger, restores via `TabCreateRequest`
+- `persistence.rs` - `PersistencePlugin`: periodic + app-exit save of tab metadata to `tabs.ron`. `ProgramState` struct owns all platform-specific persistence: `generate_cache_id()`, `write_word_cache()`, `load_word_cache()`, `delete_word_cache()` as `pub(crate)` methods. Word content cached separately per tab in `cache/` directory (native) or localStorage keys (WASM). Called from `tabs.rs` (`Content::new()`, `TabClose`). Orphan cache cleanup on startup.
 - `ui/` - egui UI: `tab_bar.rs` (tab strip), `controls.rs` (playback/WPM/font), `dialogs.rs` (new tab dialog, async file load)
 
 ## ECS Event Patterns
@@ -84,6 +84,7 @@ The app supports two build targets: **native** (Linux/macOS/Windows) and **WASM*
 - Encapsulate component internals behind methods. Use the API, don't reach into fields.
 - Each module with a plugin defines it near the top after imports
 - Don't put newlines between struct and its impl blocks
+- **Use `pub`, not `pub(crate)`.** Single-crate project — `pub(crate)` adds noise with no benefit.
 - **Comments must be timeless.** Never leave comments that reference the current conversation, refactoring session, or rationale like "we moved this here because X was duplicated." Comments should make sense to a reader who has no context of how the code evolved. If the code is self-explanatory, no comment is needed.
 
 ### Plugin code style

@@ -8,7 +8,7 @@ use bevy::prelude::*;
 use bevy::sprite::Anchor;
 
 use crate::reader::WordChanged;
-use crate::tabs::{ActiveTab, TabFontChanged, WordsManager};
+use crate::tabs::{ActiveTab, Content, TabFontChanged};
 
 /// Approximate ratio of character width to font size for monospace-like positioning.
 /// Used to offset left/right text so they abut the center ORP character.
@@ -94,7 +94,7 @@ fn setup_orp_display(
 
 fn on_word_changed(
     _trigger: On<WordChanged>,
-    active_tabs: Query<&WordsManager, With<ActiveTab>>,
+    active_tabs: Query<&Content, With<ActiveTab>>,
     mut segments: Query<(&mut Text2d, &OrpSegment)>,
 ) {
     let Ok(words_mgr) = active_tabs.single() else { return };

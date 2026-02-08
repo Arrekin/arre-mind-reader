@@ -4,7 +4,7 @@
 
 use bevy::prelude::*;
 
-use crate::tabs::{ActiveTab, TabWpm, WordsManager};
+use crate::tabs::{ActiveTab, Content, TabWpm};
 use crate::reader::{ReadingState, WordChanged};
 
 pub struct PlaybackPlugin;
@@ -44,7 +44,7 @@ impl PlaybackCommand {
         mut commands: Commands,
         current_state: Res<State<ReadingState>>,
         mut next_state: ResMut<NextState<ReadingState>>,
-        mut active_tabs: Query<(&mut TabWpm, &mut WordsManager), With<ActiveTab>>,
+        mut active_tabs: Query<(&mut TabWpm, &mut Content), With<ActiveTab>>,
     ) {
         match trigger.event() {
             PlaybackCommand::TogglePlayPause => {

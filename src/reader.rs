@@ -3,7 +3,7 @@
 use std::time::Duration;
 use bevy::prelude::*;
 
-use crate::tabs::{ActiveTab, TabWpm, WordsManager};
+use crate::tabs::{ActiveTab, Content, TabWpm};
 
 pub const WPM_DEFAULT: u32 = 300;
 pub const WPM_MIN: u32 = 100;
@@ -42,7 +42,7 @@ impl ReadingState {
         time: Res<Time>,
         mut commands: Commands,
         mut timer: ResMut<ReadingTimer>,
-        active_tab: Single<&mut WordsManager, With<ActiveTab>>,
+        active_tab: Single<&mut Content, With<ActiveTab>>,
         mut next_state: ResMut<NextState<ReadingState>>,
     ) {
         timer.timer.tick(time.delta());
@@ -71,7 +71,7 @@ impl WordChanged {
     fn on_trigger(
         _trigger: On<WordChanged>,
         mut timer: ResMut<ReadingTimer>,
-        active_tabs: Query<(&TabWpm, &WordsManager), With<ActiveTab>>,
+        active_tabs: Query<(&TabWpm, &Content), With<ActiveTab>>,
     ) {
         let Ok((wpm, words_mgr)) = active_tabs.single() else { return };
         if let Some(word) = words_mgr.current_word() {

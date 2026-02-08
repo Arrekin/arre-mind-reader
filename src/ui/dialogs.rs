@@ -7,7 +7,7 @@ use bevy::tasks::{block_on, poll_once, AsyncComputeTaskPool, Task};
 use bevy_egui::{EguiContexts, egui};
 use std::path::Path;
 
-use crate::tabs::{TabCreateRequest, TabMarker};
+use crate::tabs::{Content, TabCreateRequest, TabMarker};
 use crate::text::FileParsers;
 
 // ============================================================================
@@ -105,7 +105,7 @@ pub fn new_tab_dialog_system(
                     let tab_count = tabs.iter().count();
                     let name = format!("Text {}", tab_count + 1);
                     
-                    commands.trigger(TabCreateRequest::new(name, parsed.words));
+                    commands.trigger(TabCreateRequest::new(name, Content::new(parsed.words)));
                     
                     dialog.open = false;
                     dialog.text_input.clear();
@@ -140,7 +140,7 @@ pub fn poll_file_load_task(
                 match parser.parse(&raw.bytes) {
                     Ok(parsed) => {
                         commands.trigger(
-                            TabCreateRequest::new(tab_name, parsed.words)
+                            TabCreateRequest::new(tab_name, Content::new(parsed.words))
                                 .with_file_path(raw.file_name)
                         );
                         dialog.open = false;
