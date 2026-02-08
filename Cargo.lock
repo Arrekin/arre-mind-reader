@@ -216,6 +216,7 @@ dependencies = [
  "bevy_egui",
  "dirs",
  "gloo-storage",
+ "js-sys",
  "quick-xml 0.37.5",
  "rbook",
  "rfd",

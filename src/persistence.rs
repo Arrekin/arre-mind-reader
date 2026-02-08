@@ -51,14 +51,21 @@ pub struct ProgramState {
 impl ProgramState {
     pub fn generate_cache_id() -> String {
         use std::sync::atomic::{AtomicU64, Ordering};
-        use std::time::{SystemTime, UNIX_EPOCH};
 
         static COUNTER: AtomicU64 = AtomicU64::new(0);
         let count = COUNTER.fetch_add(1, Ordering::Relaxed);
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_nanos())
-            .unwrap_or(0);
+
+        #[cfg(not(target_arch = "wasm32"))]
+        let timestamp = {
+            use std::time::{SystemTime, UNIX_EPOCH};
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        };
+        #[cfg(target_arch = "wasm32")]
+        let timestamp = js_sys::Date::now() as u128;
+
         format!("{:x}_{}", timestamp, count)
     }
 }

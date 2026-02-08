@@ -21,6 +21,7 @@ dirs = "5.0"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 gloo-storage = "0.3"
+js-sys = "0.3"
 web-sys = "0.3"
 
 [profile.dev]
