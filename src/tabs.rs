@@ -14,6 +14,7 @@ impl Plugin for TabsPlugin {
     fn build(&self, app: &mut App) {
         app
             .init_resource::<TabOrder>()
+            .add_systems(Startup, spawn_homepage_tab)
             .add_observer(TabSelect::on_trigger)
             .add_observer(TabClose::on_trigger)
             .add_observer(TabCreateRequest::on_trigger)
@@ -63,6 +64,12 @@ pub struct ActiveTab;
 
 #[derive(Component)]
 pub struct TabMarker;
+
+#[derive(Component)]
+pub struct HomepageTab;
+
+#[derive(Component)]
+pub struct ReaderTab;
 
 #[derive(Component)]
 pub struct TabFontSettings {
@@ -140,7 +147,7 @@ impl TabSelect {
         trigger: On<TabSelect>,
         mut commands: Commands,
         active_tab: Option<Single<Entity, With<ActiveTab>>>,
-        font_settings: Query<&TabFontSettings>,
+        reader_tabs: Query<&TabFontSettings, With<ReaderTab>>,
     ) {
         let target = trigger.entity;
         
@@ -150,12 +157,12 @@ impl TabSelect {
         
         commands.entity(target).insert(ActiveTab);
         
-        if let Ok(fs) = font_settings.get(target) {
+        if let Ok(font_settings) = reader_tabs.get(target) {
             commands.trigger(TabFontChanged {
                 entity: target,
-                name: fs.font_name.clone(),
-                handle: fs.font_handle.clone(),
-                size: fs.font_size,
+                name: font_settings.font_name.clone(),
+                handle: font_settings.font_handle.clone(),
+                size: font_settings.font_size,
             });
         }
         commands.trigger(WordChanged);
@@ -177,10 +184,10 @@ impl TabClose {
         trigger: On<TabClose>,
         mut commands: Commands,
         tab_order: Res<TabOrder>,
-        tabs: Query<(Has<ActiveTab>, &Content), With<TabMarker>>,
+        tabs: Query<(Has<ActiveTab>, &Content), (With<TabMarker>, With<ReaderTab>)>,
     ) {
         let target = trigger.entity;
-        let Ok((was_active, content)) = tabs.get(target) else { return };
+        let Ok((was_active, content)) = tabs.get(target) else { return; };
 
         ProgramState::delete_word_cache(&content.content_cache_id);
         commands.entity(target).despawn();
@@ -272,6 +279,7 @@ impl TabCreateRequest {
         
         let mut entity_commands = commands.spawn((
             TabMarker,
+            ReaderTab,
             Name::new(trigger.name.clone()),
             TabFontSettings {
                 font_name,
@@ -291,4 +299,18 @@ impl TabCreateRequest {
             commands.trigger(TabSelect { entity });
         }
     }
+}
+
+// ============================================================================
+// Startup Systems
+// ============================================================================
+
+fn spawn_homepage_tab(mut commands: Commands) {
+    let entity = commands.spawn((
+        TabMarker,
+        HomepageTab,
+        Name::new("Home"),
+        ActiveTab,
+    )).id();
+    info!("Spawned homepage tab: {:?}", entity);
 }

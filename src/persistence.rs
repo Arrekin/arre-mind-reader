@@ -10,7 +10,7 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::tabs::{
-    ActiveTab, Content, TabCreateRequest, TabFilePath, TabFontSettings,
+    ActiveTab, Content, ReaderTab, TabCreateRequest, TabFilePath, TabFontSettings,
     TabMarker, TabWpm,
 };
 use crate::text::Word;
@@ -291,7 +291,7 @@ fn persist_program_state(
         &Content,
         Option<&TabFilePath>,
         Has<ActiveTab>,
-    ), With<TabMarker>>,
+    ), (With<TabMarker>, With<ReaderTab>)>,
 ) {
     save_timer.timer.tick(time.delta());
     if !save_timer.timer.just_finished() && app_exit_events.is_empty() { return; }

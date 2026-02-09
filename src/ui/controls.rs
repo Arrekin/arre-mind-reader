@@ -9,21 +9,21 @@ use bevy_egui::{EguiContexts, egui};
 use crate::fonts::FontsStore;
 use crate::playback::PlaybackCommand;
 use crate::reader::{ReadingState, WPM_MIN, WPM_MAX, WPM_STEP};
-use crate::tabs::{ActiveTab, Content, TabFontChanged, TabFontSettings, TabWpm};
+use crate::tabs::{ActiveTab, Content, ReaderTab, TabFontChanged, TabFontSettings, TabWpm};
 
 pub fn controls_system(
     mut commands: Commands,
     mut contexts: EguiContexts,
     current_state: Res<State<ReadingState>>,
     fonts: Res<FontsStore>,
-    active_tabs: Query<(Entity, &TabWpm, &TabFontSettings, &Content), With<ActiveTab>>,
+    active_reader: Query<(Entity, &TabWpm, &TabFontSettings, &Content), (With<ActiveTab>, With<ReaderTab>)>,
 ) {
     let Ok(ctx) = contexts.ctx_mut() else { return };
     
     egui::TopBottomPanel::bottom("controls").show(ctx, |ui| {
         ui.horizontal(|ui| {
-            if let Ok((entity, tab_wpm, font_settings, words_mgr)) = active_tabs.single() {
-                let at_end = words_mgr.has_words() && words_mgr.is_at_end();
+            if let Ok((entity, tab_wpm, font_settings, content)) = active_reader.single() {
+                let at_end = content.has_words() && content.is_at_end();
                 let (btn_text, btn_cmd) = match (current_state.get(), at_end) {
                     (ReadingState::Playing, _) => ("⏸ Pause", PlaybackCommand::TogglePlayPause),
                     (ReadingState::Idle, true) => ("↺ Restart", PlaybackCommand::Restart),
@@ -34,7 +34,7 @@ pub fn controls_system(
                 }
                 
                 // Progress
-                let (current, total) = words_mgr.progress();
+                let (current, total) = content.progress();
                 ui.label(format!("{}/{}", current, total));
                 
                 // Progress bar

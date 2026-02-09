@@ -11,16 +11,16 @@ native = ["bevy/dynamic_linking"]
 bevy = { version = "0.18.*", default-features = false, features = ["2d"] }
 bevy_egui = "0.39.*"
 serde = { version = "1.0.*", features = ["derive"] }
-ron = "0.12.*"
-rfd = "0.17.*"
-rbook = "0.6.*"
-quick-xml = "0.39.*"
+ron = "0.12.*"              # Rust Object Notation — tab state persistence format
+rfd = "0.17.*"              # File dialogs (native + WASM)
+rbook = "0.6.*"             # EPUB parsing (WASM-compatible)
+quick-xml = "0.39.*"        # XHTML text extraction for EPUB content
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-dirs = "6.0.*"
+dirs = "6.0.*"              # Platform config directory
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-gloo-storage = "0.3"
+gloo-storage = "0.3"        # localStorage wrapper
 js-sys = "0.3.*"
 web-sys = "0.3.*"
 

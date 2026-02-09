@@ -3,7 +3,7 @@
 use std::time::Duration;
 use bevy::prelude::*;
 
-use crate::tabs::{ActiveTab, Content, TabWpm};
+use crate::tabs::{ActiveTab, Content, ReaderTab, TabWpm};
 
 pub const WPM_DEFAULT: u32 = 300;
 pub const WPM_MIN: u32 = 100;
@@ -42,14 +42,14 @@ impl ReadingState {
         time: Res<Time>,
         mut commands: Commands,
         mut timer: ResMut<ReadingTimer>,
-        active_tab: Single<&mut Content, With<ActiveTab>>,
+        active_tab: Single<&mut Content, (With<ActiveTab>, With<ReaderTab>)>,
         mut next_state: ResMut<NextState<ReadingState>>,
     ) {
         timer.timer.tick(time.delta());
         
         if timer.timer.just_finished() {
-            let mut words_mgr = active_tab.into_inner();
-            if words_mgr.advance() {
+            let mut content = active_tab.into_inner();
+            if content.advance() {
                 commands.trigger(WordChanged);
             } else {
                 next_state.set(ReadingState::Idle);
@@ -71,10 +71,10 @@ impl WordChanged {
     fn on_trigger(
         _trigger: On<WordChanged>,
         mut timer: ResMut<ReadingTimer>,
-        active_tabs: Query<(&TabWpm, &Content), With<ActiveTab>>,
+        active_tab: Single<(&TabWpm, &Content), With<ActiveTab>>,
     ) {
-        let Ok((wpm, words_mgr)) = active_tabs.single() else { return };
-        if let Some(word) = words_mgr.current_word() {
+        let (wpm, content) = active_tab.into_inner();
+        if let Some(word) = content.current_word() {
             let delay = Duration::from_millis(word.display_duration_ms(wpm.0));
             timer.timer = Timer::new(delay, TimerMode::Once);
         }

@@ -5,7 +5,7 @@
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 
-use crate::tabs::{ActiveTab, TabClose, TabMarker, TabOrder, TabSelect};
+use crate::tabs::{ActiveTab, HomepageTab, TabClose, TabMarker, TabOrder, TabSelect};
 use super::NewTabDialog;
 
 pub fn tab_bar_system(
@@ -13,31 +13,29 @@ pub fn tab_bar_system(
     mut contexts: EguiContexts,
     mut dialog: ResMut<NewTabDialog>,
     tab_order: Res<TabOrder>,
-    tabs: Query<(&Name, Has<ActiveTab>), With<TabMarker>>,
+    tabs: Query<(&Name, Has<HomepageTab>, Has<ActiveTab>), With<TabMarker>>,
 ) {
     let Ok(ctx) = contexts.ctx_mut() else { return };
     
-    let tab_info: Vec<(Entity, Name, bool)> = tab_order.entities().iter()
-        .filter_map(|&entity| {
-            tabs.get(entity).ok().map(|(name, is_active)| (entity, name.clone(), is_active))
-        })
-        .collect();
-    
     egui::TopBottomPanel::top("tabs").show(ctx, |ui| {
         ui.horizontal(|ui| {
-            for (entity, name, is_active) in &tab_info {
-                let label = if *is_active {
+            for &entity in tab_order.entities().iter() {
+                let Ok((name, is_homepage, is_active)) = tabs.get(entity) else { continue };
+                
+                let label = if is_active {
                     egui::RichText::new(name.as_str()).strong()
                 } else {
                     egui::RichText::new(name.as_str())
                 };
                 
                 ui.horizontal(|ui| {
-                    if ui.selectable_label(*is_active, label).clicked() {
-                        commands.trigger(TabSelect::from(*entity));
+                    if ui.selectable_label(is_active, label).clicked() {
+                        commands.trigger(TabSelect::from(entity));
                     }
-                    if ui.small_button("×").clicked() {
-                        commands.trigger(TabClose::from(*entity));
+                    if !is_homepage {
+                        if ui.small_button("×").clicked() {
+                            commands.trigger(TabClose::from(entity));
+                        }
                     }
                 });
                 ui.separator();
