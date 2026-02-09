@@ -34,7 +34,8 @@ Each file follows: imports → Plugin definition → constants → types/compone
 - `text.rs` - `FileParsers` registry, `TextParser` trait, `Word`/`ParseResult`/`Section` structs
 - `fonts.rs` - `FontsStore` resource, built-in + discovered fonts
 - `persistence.rs` - Periodic save of tab metadata to `tabs.ron`, per-tab word cache, orphan cleanup
-- `ui/` - egui UI: `tab_bar.rs`, `controls.rs`, `dialogs.rs`
+- `ui/` - egui UI: `tab_bar.rs`, `controls.rs`, `dialogs.rs`, `homepage.rs`
+  - `homepage.rs` — Tile entities (ECS-native): each tile is a Bevy entity with `TilePosition`, `TileSize`, `TileVisuals` + a marker component. Each tile type has its own system querying only what it needs. `tile_frame()` helper renders shared chrome (background, title, separator) via `egui::Area`. Systems gated by `homepage_active` run condition.
 
 ## ECS Event Patterns
 - **Tab lifecycle:** `EntityEvent` structs (`TabSelect`, `TabClose`) with observers. `TabOrder` auto-updates via `Add`/`Remove` observers on `TabMarker`.

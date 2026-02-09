@@ -309,7 +309,7 @@ fn spawn_homepage_tab(mut commands: Commands) {
     let entity = commands.spawn((
         TabMarker,
         HomepageTab,
-        Name::new("Home"),
+        Name::new("🏠"),
         ActiveTab,
     )).id();
     info!("Spawned homepage tab: {:?}", entity);

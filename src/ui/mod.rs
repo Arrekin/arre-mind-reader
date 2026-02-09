@@ -1,11 +1,12 @@
 //! UI systems using bevy_egui.
 //!
-//! Provides tab bar, playback controls, settings panel, and the new tab dialog.
+//! Provides tab bar, playback controls, settings panel, homepage tiles, and the new tab dialog.
 //! UI components emit events/commands rather than directly mutating state.
 
 mod tab_bar;
 mod controls;
 mod dialogs;
+mod homepage;
 
 use bevy::prelude::*;
 use bevy_egui::EguiPrimaryContextPass;
@@ -18,12 +19,20 @@ impl Plugin for UiPlugin {
         app
             .init_resource::<NewTabDialog>()
             .init_resource::<PendingFileLoad>()
+            .add_systems(Startup, homepage::HomepageTile::spawn)
             .add_systems(Update, dialogs::poll_file_load_task)
             .add_systems(EguiPrimaryContextPass, (
-                tab_bar::tab_bar_system,
-                controls::controls_system,
+                (tab_bar::tab_bar_system, controls::controls_system),
                 dialogs::new_tab_dialog_system,
-            ))
+                (
+                    homepage::HomepageTile::background,
+                    homepage::AboutTile::update,
+                    homepage::FontSettingsTile::update,
+                    homepage::ShortcutsTile::update,
+                    homepage::StatsTile::update,
+                    homepage::TipsTile::update,
+                ).chain().run_if(homepage::HomepageTile::is_active),
+            ).chain())
             ;
     }
 }
