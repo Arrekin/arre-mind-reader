@@ -14,11 +14,13 @@ impl Plugin for TabsPlugin {
     fn build(&self, app: &mut App) {
         app
             .init_resource::<TabOrder>()
+            .init_resource::<DefaultTabSettings>()
             .add_systems(Startup, spawn_homepage_tab)
             .add_observer(TabSelect::on_trigger)
             .add_observer(TabClose::on_trigger)
             .add_observer(TabCreateRequest::on_trigger)
             .add_observer(TabFontChanged::on_trigger)
+            .add_observer(ApplyDefaultsToAll::on_trigger)
             .add_observer(TabOrder::on_tab_added)
             .add_observer(TabOrder::on_tab_removed)
             ;
@@ -28,6 +30,22 @@ impl Plugin for TabsPlugin {
 // ============================================================================
 // Resources
 // ============================================================================
+
+#[derive(Resource)]
+pub struct DefaultTabSettings {
+    pub font_name: Option<String>,
+    pub font_size: f32,
+    pub wpm: u32,
+}
+impl Default for DefaultTabSettings {
+    fn default() -> Self {
+        Self {
+            font_name: None,
+            font_size: FONT_SIZE_DEFAULT,
+            wpm: WPM_DEFAULT,
+        }
+    }
+}
 
 /// Maintains ordered list of tab entities for consistent UI display.
 /// Automatically updated via lifecycle observers on `TabMarker`.
@@ -232,8 +250,8 @@ pub struct TabCreateRequest {
     pub content: Content,
     pub file_path: Option<String>,
     pub font_name: Option<String>,
-    pub font_size: f32,
-    pub wpm: u32,
+    pub font_size: Option<f32>,
+    pub wpm: Option<u32>,
     pub is_active: bool,
 }
 impl TabCreateRequest {
@@ -243,8 +261,8 @@ impl TabCreateRequest {
             content,
             file_path: None,
             font_name: None,
-            font_size: FONT_SIZE_DEFAULT,
-            wpm: WPM_DEFAULT,
+            font_size: None,
+            wpm: None,
             is_active: true,
         }
     }
@@ -254,11 +272,11 @@ impl TabCreateRequest {
     }
     pub fn with_font(mut self, name: String, size: f32) -> Self {
         self.font_name = Some(name);
-        self.font_size = size;
+        self.font_size = Some(size);
         self
     }
     pub fn with_wpm(mut self, wpm: u32) -> Self {
-        self.wpm = wpm;
+        self.wpm = Some(wpm);
         self
     }
     pub fn with_active(mut self, active: bool) -> Self {
@@ -269,13 +287,17 @@ impl TabCreateRequest {
         trigger: On<TabCreateRequest>,
         mut commands: Commands,
         fonts: Res<FontsStore>,
+        defaults: Res<DefaultTabSettings>,
     ) {
-        // Resolve font: try requested name → fall back to first available font
+        // Resolve font: explicit request → default settings → first available font
         let font_data = trigger.font_name.as_ref()
             .and_then(|name| fonts.get_by_name(name))
+            .or_else(|| defaults.font_name.as_ref().and_then(|name| fonts.get_by_name(name)))
             .or_else(|| fonts.default_font());
         let font_name = font_data.map(|f| f.name.clone()).unwrap_or_default();
         let font_handle = font_data.map(|f| f.handle.clone()).unwrap_or_default();
+        let font_size = trigger.font_size.unwrap_or(defaults.font_size);
+        let wpm = trigger.wpm.unwrap_or(defaults.wpm);
         
         let mut entity_commands = commands.spawn((
             TabMarker,
@@ -284,9 +306,9 @@ impl TabCreateRequest {
             TabFontSettings {
                 font_name,
                 font_handle,
-                font_size: trigger.font_size,
+                font_size,
             },
-            TabWpm(trigger.wpm),
+            TabWpm(wpm),
             trigger.content.clone(),
         ));
         
@@ -297,6 +319,34 @@ impl TabCreateRequest {
         if trigger.is_active {
             let entity = entity_commands.id();
             commands.trigger(TabSelect { entity });
+        }
+    }
+}
+
+#[derive(Event)]
+pub struct ApplyDefaultsToAll;
+impl ApplyDefaultsToAll {
+    fn on_trigger(
+        _trigger: On<ApplyDefaultsToAll>,
+        mut commands: Commands,
+        defaults: Res<DefaultTabSettings>,
+        fonts: Res<FontsStore>,
+        mut reader_tabs: Query<(Entity, &mut TabWpm), With<ReaderTab>>,
+    ) {
+        let font_data = defaults.font_name.as_ref()
+            .and_then(|name| fonts.get_by_name(name))
+            .or_else(|| fonts.default_font());
+        let font_name = font_data.map(|f| f.name.clone()).unwrap_or_default();
+        let font_handle = font_data.map(|f| f.handle.clone()).unwrap_or_default();
+
+        for (entity, mut tab_wpm) in reader_tabs.iter_mut() {
+            tab_wpm.0 = defaults.wpm;
+            commands.trigger(TabFontChanged {
+                entity,
+                name: font_name.clone(),
+                handle: font_handle.clone(),
+                size: defaults.font_size,
+            });
         }
     }
 }

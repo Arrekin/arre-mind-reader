@@ -7,7 +7,9 @@
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 
-use crate::tabs::{ActiveTab, HomepageTab};
+use crate::fonts::FontsStore;
+use crate::reader::{FONT_SIZE_MIN, FONT_SIZE_MAX, WPM_MIN, WPM_MAX, WPM_STEP};
+use crate::tabs::{ActiveTab, ApplyDefaultsToAll, DefaultTabSettings, HomepageTab};
 
 const TILE_ROUNDING: u8 = 6;
 const TILE_INNER_MARGIN: i8 = 12;
@@ -41,32 +43,34 @@ impl HomepageTile {
     }
 
     pub fn spawn(mut commands: Commands) {
-        // Row 1: About (360×200) + Font Settings (260×200)
+        // Row 1: About (360×200) + Default Tab Settings (260×320)
+        // Row 1 height = 320, About vertically centered: y_offset = (320-200)/2 = 60
         // Row 1 total width: 360 + 8 + 260 = 628, centered in 1280: x_start = 326
         commands.spawn((HomepageTile, AboutTile,
-            TilePosition(Vec2::new(326.0, 130.0)),
+            TilePosition(Vec2::new(326.0, 166.0)),
             TileSize(Vec2::new(360.0, 200.0)),
             TileVisuals { title: "About", color: COLOR_ABOUT },
         ));
         commands.spawn((HomepageTile, FontSettingsTile,
-            TilePosition(Vec2::new(694.0, 130.0)),
-            TileSize(Vec2::new(260.0, 200.0)),
-            TileVisuals { title: "Font Settings", color: COLOR_FONT },
+            TilePosition(Vec2::new(694.0, 106.0)),
+            TileSize(Vec2::new(260.0, 320.0)),
+            TileVisuals { title: "Default Tab Settings", color: COLOR_FONT },
         ));
         // Row 2: Shortcuts (260×180) + Stats (220×180) + Tips (300×180)
+        // Row 2 starts at 106 + 320 + 8 = 434
         // Row 2 total width: 260 + 8 + 220 + 8 + 300 = 796, centered in 1280: x_start = 242
         commands.spawn((HomepageTile, ShortcutsTile,
-            TilePosition(Vec2::new(242.0, 338.0)),
+            TilePosition(Vec2::new(242.0, 434.0)),
             TileSize(Vec2::new(260.0, 180.0)),
             TileVisuals { title: "Keyboard Shortcuts", color: COLOR_SHORTCUTS },
         ));
         commands.spawn((HomepageTile, StatsTile,
-            TilePosition(Vec2::new(510.0, 338.0)),
+            TilePosition(Vec2::new(510.0, 434.0)),
             TileSize(Vec2::new(220.0, 180.0)),
             TileVisuals { title: "Reading Stats", color: COLOR_STATS },
         ));
         commands.spawn((HomepageTile, TipsTile,
-            TilePosition(Vec2::new(738.0, 338.0)),
+            TilePosition(Vec2::new(738.0, 434.0)),
             TileSize(Vec2::new(300.0, 180.0)),
             TileVisuals { title: "Tips", color: COLOR_TIPS },
         ));
@@ -110,30 +114,53 @@ impl AboutTile {
 pub struct FontSettingsTile;
 impl FontSettingsTile {
     pub fn update(
+        mut commands: Commands,
         mut contexts: EguiContexts,
+        fonts: Res<FontsStore>,
+        mut defaults: ResMut<DefaultTabSettings>,
         tile: Single<(&TilePosition, &TileSize, &TileVisuals), With<FontSettingsTile>>,
     ) {
         let Ok(ctx) = contexts.ctx_mut() else { return };
         let (position, size, visuals) = tile.into_inner();
+
+        let effective_font_name = defaults.font_name.clone()
+            .or_else(|| fonts.default_font().map(|f| f.name.clone()))
+            .unwrap_or_default();
+
         tile_frame(ctx, "font_settings", position, size, visuals, |ui| {
-            ui.label("Default Font:");
+            ui.label("Font:");
             ui.add_space(4.0);
-            let mut selected = "JetBrains Mono";
-            egui::ComboBox::from_id_salt("font_mock")
-                .selected_text(selected)
+            egui::ComboBox::from_id_salt("default_font")
+                .selected_text(&effective_font_name)
                 .width(ui.available_width() - 16.0)
                 .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut selected, "JetBrains Mono", "JetBrains Mono");
-                    ui.selectable_value(&mut selected, "Ubuntu Mono", "Ubuntu Mono");
+                    for font_data in &fonts.fonts {
+                        if ui.selectable_label(
+                            effective_font_name == font_data.name,
+                            &font_data.name,
+                        ).clicked() {
+                            defaults.font_name = Some(font_data.name.clone());
+                        }
+                    }
                 });
+
             ui.add_space(8.0);
-            ui.label("Default Size:");
-            let mut size: f32 = 48.0;
-            ui.add(egui::Slider::new(&mut size, 16.0..=96.0).suffix(" px"));
+            ui.label("Font Size:");
+            ui.add(egui::Slider::new(&mut defaults.font_size, FONT_SIZE_MIN..=FONT_SIZE_MAX)
+                .suffix(" px"));
+
             ui.add_space(8.0);
-            ui.label("Default WPM:");
-            let mut wpm: u32 = 300;
-            ui.add(egui::Slider::new(&mut wpm, 100..=1000).suffix(" wpm"));
+            ui.label("WPM:");
+            ui.add(egui::Slider::new(&mut defaults.wpm, WPM_MIN..=WPM_MAX)
+                .step_by(WPM_STEP as f64)
+                .suffix(" wpm"));
+
+            ui.add_space(12.0);
+            ui.separator();
+            ui.add_space(8.0);
+            if ui.button("Apply to all tabs").clicked() {
+                commands.trigger(ApplyDefaultsToAll);
+            }
         });
     }
 }

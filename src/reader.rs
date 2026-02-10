@@ -10,6 +10,8 @@ pub const WPM_MIN: u32 = 100;
 pub const WPM_MAX: u32 = 1000;
 pub const WPM_STEP: u32 = 50;
 pub const FONT_SIZE_DEFAULT: f32 = 48.0;
+pub const FONT_SIZE_MIN: f32 = 16.0;
+pub const FONT_SIZE_MAX: f32 = 96.0;
 
 pub struct ReaderPlugin;
 impl Plugin for ReaderPlugin {
