@@ -257,11 +257,8 @@ fn spawn_tabs_from_program_state(
     let program_state = ProgramState::load();
 
     *defaults = program_state.defaults.clone();
-    if defaults.font_name.is_empty() {
-        if let Some(font) = fonts.default_font() {
-            defaults.font_name = font.name.clone();
-        }
-    }
+    // Check if the current font still exists. If not, it will be overwritten with default font
+    defaults.font_name = fonts.resolve(&defaults.font_name).name.clone();
     let total_tabs = program_state.tabs.len();
 
     let valid_ids: HashSet<String> = program_state.tabs.iter()

@@ -59,14 +59,9 @@ pub fn controls_system(
             egui::ComboBox::from_id_salt("font_selector")
                 .selected_text(&font_settings.font_name)
                 .show_ui(ui, |ui| {
-                    for font_data in &fonts.fonts {
+                    for font_data in fonts.iter() {
                         if ui.selectable_label(font_settings.font_name == font_data.name, &font_data.name).clicked() {
-                            commands.trigger(TabFontChanged {
-                                entity,
-                                name: font_data.name.clone(),
-                                handle: font_data.handle.clone(),
-                                size: font_settings.font_size,
-                            });
+                            commands.trigger(TabFontChanged::from_font(entity, font_data, font_settings.font_size));
                         }
                     }
                 });

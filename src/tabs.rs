@@ -233,6 +233,14 @@ pub struct TabFontChanged {
     pub size: f32,
 }
 impl TabFontChanged {
+    pub fn from_font(entity: Entity, font: &crate::fonts::FontData, size: f32) -> Self {
+        Self {
+            entity,
+            name: font.name.clone(),
+            handle: font.handle.clone(),
+            size,
+        }
+    }
     fn on_trigger(
         trigger: On<TabFontChanged>,
         mut tabs: Query<&mut TabFontSettings>,
@@ -290,13 +298,7 @@ impl TabCreateRequest {
         fonts: Res<FontsStore>,
         defaults: Res<DefaultTabSettings>,
     ) {
-        // Resolve font: explicit request → default settings → first available font
-        let font_data = trigger.font_name.as_ref()
-            .and_then(|name| fonts.get_by_name(name))
-            .or_else(|| fonts.get_by_name(&defaults.font_name))
-            .or_else(|| fonts.default_font());
-        let font_name = font_data.map(|f| f.name.clone()).unwrap_or_default();
-        let font_handle = font_data.map(|f| f.handle.clone()).unwrap_or_default();
+        let font = fonts.resolve(trigger.font_name.as_deref().unwrap_or(&defaults.font_name));
         let font_size = trigger.font_size.unwrap_or(defaults.font_size);
         let wpm = trigger.wpm.unwrap_or(defaults.wpm);
         
@@ -305,8 +307,8 @@ impl TabCreateRequest {
             ReaderTab,
             Name::new(trigger.name.clone()),
             TabFontSettings {
-                font_name,
-                font_handle,
+                font_name: font.name.clone(),
+                font_handle: font.handle.clone(),
                 font_size,
             },
             TabWpm(wpm),
@@ -334,19 +336,11 @@ impl ApplyDefaultsToAll {
         fonts: Res<FontsStore>,
         mut reader_tabs: Query<(Entity, &mut TabWpm), With<ReaderTab>>,
     ) {
-        let font_data = fonts.get_by_name(&defaults.font_name)
-            .or_else(|| fonts.default_font());
-        let font_name = font_data.map(|f| f.name.clone()).unwrap_or_default();
-        let font_handle = font_data.map(|f| f.handle.clone()).unwrap_or_default();
+        let font = fonts.resolve(&defaults.font_name);
 
         for (entity, mut tab_wpm) in reader_tabs.iter_mut() {
             tab_wpm.0 = defaults.wpm;
-            commands.trigger(TabFontChanged {
-                entity,
-                name: font_name.clone(),
-                handle: font_handle.clone(),
-                size: defaults.font_size,
-            });
+            commands.trigger(TabFontChanged::from_font(entity, font, defaults.font_size));
         }
     }
 }
@@ -356,11 +350,10 @@ impl ApplyDefaultsToAll {
 // ============================================================================
 
 fn spawn_homepage_tab(mut commands: Commands) {
-    let entity = commands.spawn((
+    commands.spawn((
         TabMarker,
         HomepageTab,
         Name::new("🏠"),
         ActiveTab,
-    )).id();
-    info!("Spawned homepage tab: {:?}", entity);
+    ));
 }

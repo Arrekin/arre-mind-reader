@@ -132,7 +132,7 @@ impl FontSettingsTile {
                 .selected_text(&effective_font_name)
                 .width(ui.available_width() - 16.0)
                 .show_ui(ui, |ui| {
-                    for font_data in &fonts.fonts {
+                    for font_data in fonts.iter() {
                         if ui.selectable_label(
                             effective_font_name == font_data.name,
                             &font_data.name,
@@ -173,11 +173,19 @@ impl ShortcutsTile {
         let Ok(ctx) = contexts.ctx_mut() else { return };
         let (position, size, visuals) = tile.into_inner();
         tile_frame(ctx, "shortcuts", position, size, visuals, |ui| {
-            shortcut_row(ui, "Space", "Play / Pause");
-            shortcut_row(ui, "Escape", "Stop");
-            shortcut_row(ui, "← / →", "Skip 5 words");
-            shortcut_row(ui, "↑ / ↓", "Adjust WPM ±50");
-            shortcut_row(ui, "R", "Restart");
+            Self::shortcut_row(ui, "Space", "Play / Pause");
+            Self::shortcut_row(ui, "Escape", "Stop");
+            Self::shortcut_row(ui, "← / →", "Skip 5 words");
+            Self::shortcut_row(ui, "↑ / ↓", "Adjust WPM ±50");
+            Self::shortcut_row(ui, "R", "Restart");
+        });
+    }
+
+    fn shortcut_row(ui: &mut egui::Ui, key: &str, description: &str) {
+        ui.horizontal(|ui| {
+            ui.monospace(egui::RichText::new(format!("{:>9}", key))
+                .color(egui::Color32::from_rgb(200, 200, 140)));
+            ui.label(description);
         });
     }
 }
@@ -192,12 +200,23 @@ impl StatsTile {
         let Ok(ctx) = contexts.ctx_mut() else { return };
         let (position, size, visuals) = tile.into_inner();
         tile_frame(ctx, "stats", position, size, visuals, |ui| {
-            stat_row(ui, "Total words read", "12,847");
-            stat_row(ui, "Sessions", "23");
-            stat_row(ui, "Avg WPM", "342");
-            stat_row(ui, "Books finished", "2");
+            Self::stat_row(ui, "Total words read", "12,847");
+            Self::stat_row(ui, "Sessions", "23");
+            Self::stat_row(ui, "Avg WPM", "342");
+            Self::stat_row(ui, "Books finished", "2");
         });
     }
+
+    fn stat_row(ui: &mut egui::Ui, label: &str, value: &str) {
+        ui.horizontal(|ui| {
+            ui.label(label);
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.strong(egui::RichText::new(value)
+                    .color(egui::Color32::from_rgb(140, 200, 200)));
+            });
+        });
+    }
+
 }
 
 #[derive(Component)]
@@ -247,22 +266,4 @@ fn tile_frame(
                     content(ui);
                 });
         });
-}
-
-fn shortcut_row(ui: &mut egui::Ui, key: &str, description: &str) {
-    ui.horizontal(|ui| {
-        ui.monospace(egui::RichText::new(format!("{:>9}", key))
-            .color(egui::Color32::from_rgb(200, 200, 140)));
-        ui.label(description);
-    });
-}
-
-fn stat_row(ui: &mut egui::Ui, label: &str, value: &str) {
-    ui.horizontal(|ui| {
-        ui.label(label);
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ui.strong(egui::RichText::new(value)
-                .color(egui::Color32::from_rgb(140, 200, 200)));
-        });
-    });
 }

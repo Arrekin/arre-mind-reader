@@ -28,14 +28,21 @@ pub struct FontData {
 
 #[derive(Resource, Default)]
 pub struct FontsStore {
-    pub fonts: Vec<FontData>,
+    fonts: Vec<FontData>,
 }
 impl FontsStore {
-    pub fn default_font(&self) -> Option<&FontData> {
-        self.fonts.first()
+    pub fn default_font(&self) -> &FontData {
+        self.fonts.first().expect("FontsStore is guaranteed non-empty")
     }
     pub fn get_by_name(&self, name: &str) -> Option<&FontData> {
         self.fonts.iter().find(|f| f.name == name)
+    }
+    /// Returns the font matching `name`, falling back to the first loaded font.
+    pub fn resolve(&self, name: &str) -> &FontData {
+        self.get_by_name(name).unwrap_or_else(|| self.default_font())
+    }
+    pub fn iter(&self) -> impl Iterator<Item = &FontData> {
+        self.fonts.iter()
     }
     fn load_fonts(
         mut fonts_store: ResMut<FontsStore>,
@@ -63,6 +70,8 @@ impl FontsStore {
             let handle = asset_server.load(format!("fonts/{}", name));
             FontData { name, handle }
         }).collect();
+
+        assert!(!fonts_store.fonts.is_empty(), "No fonts found in assets/fonts");
         info!("Loaded {} fonts", fonts_store.fonts.len());
     }
 }
