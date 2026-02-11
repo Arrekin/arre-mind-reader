@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::fonts::{FontData, FontsStore};
 use crate::persistence::ProgramState;
-use crate::reader::{FONT_SIZE_DEFAULT, WPM_DEFAULT, WordChanged};
+use crate::reader::{FONT_SIZE_DEFAULT, WPM_DEFAULT};
 use crate::text::Word;
 
 pub struct TabsPlugin;
@@ -188,8 +188,8 @@ pub struct TabSelect {
     pub entity: Entity,
 }
 impl TabSelect {
-    /// Moves `ActiveTab` to the target entity and fires `WordChanged`
-    /// so the ORP display and reading timer sync to the new tab's state.
+    /// Moves `ActiveTab` to the target entity. Downstream effects (ORP update,
+    /// timer reset) are handled reactively via `On<Insert, ActiveTab>` observers.
     fn on_trigger(
         trigger: On<TabSelect>,
         mut commands: Commands,
@@ -202,7 +202,6 @@ impl TabSelect {
         }
         
         commands.entity(target).insert(ActiveTab);
-        commands.trigger(WordChanged);
     }
 }
 impl From<Entity> for TabSelect {

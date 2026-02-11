@@ -53,6 +53,7 @@ impl ReaderDisplay {
             *visibility = Visibility::Inherited;
         }
         commands.entity(entity).insert(TabFontSettings::from_font(&font_settings.font, font_settings.font_size));
+        commands.trigger(WordChanged);
     }
 
     /// Hides the ORP display when a non-reader tab becomes active.

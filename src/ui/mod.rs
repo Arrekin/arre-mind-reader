@@ -20,10 +20,10 @@ impl Plugin for UiPlugin {
             .init_resource::<NewTabDialog>()
             .init_resource::<PendingFileLoad>()
             .add_systems(Startup, homepage::HomepageTile::spawn)
-            .add_systems(Update, dialogs::poll_file_load_task)
+            .add_systems(Update, dialogs::PendingFileLoad::poll)
             .add_systems(EguiPrimaryContextPass, (
                 (tab_bar::tab_bar_system, controls::controls_system),
-                dialogs::new_tab_dialog_system,
+                dialogs::NewTabDialog::update.run_if(dialogs::NewTabDialog::is_open),
                 (
                     homepage::HomepageTile::background,
                     homepage::AboutTile::update,
