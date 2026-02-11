@@ -9,7 +9,7 @@ use bevy_egui::{EguiContexts, egui};
 use crate::fonts::FontsStore;
 use crate::playback::PlaybackCommand;
 use crate::reader::{ReadingState, WPM_MIN, WPM_MAX, WPM_STEP};
-use crate::tabs::{ActiveTab, Content, ReaderTab, TabFontChanged, TabFontSettings, TabWpm};
+use crate::tabs::{ActiveTab, Content, ReaderTab, TabFontSettings, TabWpm};
 
 pub fn controls_system(
     mut commands: Commands,
@@ -57,11 +57,11 @@ pub fn controls_system(
             // Font selector (per-tab)
             ui.label("Font:");
             egui::ComboBox::from_id_salt("font_selector")
-                .selected_text(&font_settings.font_name)
+                .selected_text(&font_settings.font.name)
                 .show_ui(ui, |ui| {
                     for font_data in fonts.iter() {
-                        if ui.selectable_label(font_settings.font_name == font_data.name, &font_data.name).clicked() {
-                            commands.trigger(TabFontChanged::from_font(entity, font_data, font_settings.font_size));
+                        if ui.selectable_label(font_settings.font.name == font_data.name, &font_data.name).clicked() {
+                            commands.entity(entity).insert(TabFontSettings::from_font(font_data, font_settings.font_size));
                         }
                     }
                 });

@@ -12,10 +12,10 @@ Arre Mind Reader is a speed-reading application built with Bevy and Rust. It imp
 ## Design Decisions
 - **ORP (Optical Recognition Point):** The letter the eye fixates on, positioned at screen center (0,0). Research shows slightly left-of-center is optimal.
 - **Monospace fonts only.** The ORP positioning uses a fixed `CHAR_WIDTH_RATIO` (0.6) to estimate character width. Proportional fonts will misalign. This is intentional — RSVP works best with monospace.
-- **Tab types.** `HomepageTab` and `ReaderTab` marker components distinguish tab kinds at the query level. Homepage is a special non-closeable tab spawned on startup — no `Content`, `TabFontSettings`, or `TabWpm`. Systems use query filters (e.g. `With<ReaderTab>`) instead of runtime type checks. ORP/reticle entities carry a `ReaderDisplay` marker; an `On<Add, ActiveTab>` observer in `orp.rs` toggles their `Visibility` based on whether the active tab has `ReaderTab`.
+- **Tab types.** `HomepageTab` and `ReaderTab` marker components distinguish tab kinds at the query level. Homepage is a special non-closeable tab spawned on startup — no `Content`, `TabFontSettings`, or `TabWpm`. Systems use query filters (e.g. `With<ReaderTab>`) instead of runtime type checks. ORP/reticle entities carry a `ReaderDisplay` marker; two `On<Insert, ActiveTab>` observers in `orp.rs` handle tab activation: `on_reader_tab_activated` (uses `Single<..., With<ReaderTab>>`) shows the display and re-inserts font settings, while `on_homepage_tab_activated` (uses `Single<..., With<HomepageTab>>`) hides it. Bevy auto-skips the non-matching observer via `Single`.
 - **Per-tab settings.** Font and WPM are stored per-tab, not globally. ORP highlight color is hardcoded red.
 - **WordChanged event.** A `WordChanged` trigger (in `reader.rs`) is fired whenever the current word changes — by tick advance, skip, restart, or tab switch. Observers reset `ReadingTimer` and update ORP text content. All code that changes the current word must trigger `WordChanged`.
-- **TabFontChanged event.** An `EntityEvent` carrying font name, handle, and size. Fired by: (1) UI font selector, (2) `TabSelect` cascade on tab switch. Two observers react: one applies changes to `TabFontSettings` component, one updates ORP display entities (font + positions).
+- **Font changes via component insertion.** Font is changed by inserting `TabFontSettings` on the tab entity (no separate event). `On<Insert, TabFontSettings>` in `orp.rs` updates ORP display for the active tab. `On<Insert, ActiveTab>` also reads font settings to update ORP on tab switch.
 - **Centralized tab creation.** All tab creation goes through `TabCreateRequest` (with builder pattern). Both persistence restore and UI dialogs trigger this event — never spawn tab entities manually.
 - **Encapsulation.** `Content` and `TabOrder` expose methods for their operations. Use the API (e.g. `advance()`, `current_word()`, `find_adjacent()`) instead of accessing their fields directly.
 - **Paragraph detection.** Blank lines in source text mark the *last word before the gap* as `is_paragraph_end`, not the first word after. This ensures the reading pause happens at the end of the paragraph.
@@ -41,8 +41,8 @@ Each file follows: imports → Plugin definition → constants → types/compone
 - **Tab lifecycle:** `EntityEvent` structs (`TabSelect`, `TabClose`) with observers. `TabOrder` auto-updates via `Add`/`Remove` observers on `TabMarker`.
 - **Playback:** `Event` trigger (`PlaybackCommand`) with observer
 - **Word lifecycle:** `WordChanged` trigger (global `Event`) fired after any word navigation. Observer in `reader.rs` resets the reading timer. Observer in `orp.rs` updates display text.
-- **Font lifecycle:** `TabFontChanged` `EntityEvent` targeting a tab entity. Observer in `tabs.rs` applies to `TabFontSettings`. Observer in `orp.rs` updates display font/positions. `TabSelect` cascades this on tab switch.
-- **UI → state:** UI emits events/triggers, observers react. No direct component mutation in UI systems.
+- **Font lifecycle:** Font changes are applied by inserting `TabFontSettings` directly on the tab entity. `On<Insert, TabFontSettings>` observer in `orp.rs` updates display font/positions (only for the active tab). `On<Insert, ActiveTab>` also updates ORP font on tab switch.
+- **UI → state:** UI emits events/triggers or inserts components via `commands`, observers react. No direct query mutation in UI systems.
 
 ## Bevy 0.18 Patterns
 These differ from older Bevy versions — do not rely on pre-0.16 knowledge:

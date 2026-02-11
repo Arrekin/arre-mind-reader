@@ -5,7 +5,7 @@
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::fonts::FontsStore;
+use crate::fonts::{FontData, FontsStore};
 use crate::persistence::ProgramState;
 use crate::reader::{FONT_SIZE_DEFAULT, WPM_DEFAULT, WordChanged};
 use crate::text::Word;
@@ -20,7 +20,6 @@ impl Plugin for TabsPlugin {
             .add_observer(TabSelect::on_trigger)
             .add_observer(TabClose::on_trigger)
             .add_observer(TabCreateRequest::on_trigger)
-            .add_observer(TabFontChanged::on_trigger)
             .add_observer(ApplyDefaultsToAll::on_trigger)
             .add_observer(TabOrder::on_tab_added)
             .add_observer(TabOrder::on_tab_removed)
@@ -92,9 +91,16 @@ pub struct ReaderTab;
 
 #[derive(Component)]
 pub struct TabFontSettings {
-    pub font_name: String,
-    pub font_handle: Handle<Font>,
+    pub font: FontData,
     pub font_size: f32,
+}
+impl TabFontSettings {
+    pub fn from_font(font: &FontData, size: f32) -> Self {
+        Self {
+            font: font.clone(),
+            font_size: size,
+        }
+    }
 }
 
 #[derive(Component)]
@@ -166,7 +172,6 @@ impl TabSelect {
         trigger: On<TabSelect>,
         mut commands: Commands,
         active_tab: Option<Single<Entity, With<ActiveTab>>>,
-        reader_tabs: Query<&TabFontSettings, With<ReaderTab>>,
     ) {
         let target = trigger.entity;
         
@@ -175,15 +180,6 @@ impl TabSelect {
         }
         
         commands.entity(target).insert(ActiveTab);
-        
-        if let Ok(font_settings) = reader_tabs.get(target) {
-            commands.trigger(TabFontChanged {
-                entity: target,
-                name: font_settings.font_name.clone(),
-                handle: font_settings.font_handle.clone(),
-                size: font_settings.font_size,
-            });
-        }
         commands.trigger(WordChanged);
     }
 }
@@ -224,34 +220,6 @@ impl From<Entity> for TabClose {
     }
 }
 
-
-#[derive(EntityEvent)]
-pub struct TabFontChanged {
-    pub entity: Entity,
-    pub name: String,
-    pub handle: Handle<Font>,
-    pub size: f32,
-}
-impl TabFontChanged {
-    pub fn from_font(entity: Entity, font: &crate::fonts::FontData, size: f32) -> Self {
-        Self {
-            entity,
-            name: font.name.clone(),
-            handle: font.handle.clone(),
-            size,
-        }
-    }
-    fn on_trigger(
-        trigger: On<TabFontChanged>,
-        mut tabs: Query<&mut TabFontSettings>,
-    ) {
-        if let Ok(mut font_settings) = tabs.get_mut(trigger.entity) {
-            font_settings.font_name = trigger.name.clone();
-            font_settings.font_handle = trigger.handle.clone();
-            font_settings.font_size = trigger.size;
-        }
-    }
-}
 
 #[derive(Event)]
 pub struct TabCreateRequest {
@@ -306,11 +274,7 @@ impl TabCreateRequest {
             TabMarker,
             ReaderTab,
             Name::new(trigger.name.clone()),
-            TabFontSettings {
-                font_name: font.name.clone(),
-                font_handle: font.handle.clone(),
-                font_size,
-            },
+            TabFontSettings::from_font(font, font_size),
             TabWpm(wpm),
             trigger.content.clone(),
         ));
@@ -334,13 +298,15 @@ impl ApplyDefaultsToAll {
         mut commands: Commands,
         defaults: Res<DefaultTabSettings>,
         fonts: Res<FontsStore>,
-        mut reader_tabs: Query<(Entity, &mut TabWpm), With<ReaderTab>>,
+        reader_tabs: Query<Entity, With<ReaderTab>>,
     ) {
         let font = fonts.resolve(&defaults.font_name);
 
-        for (entity, mut tab_wpm) in reader_tabs.iter_mut() {
-            tab_wpm.0 = defaults.wpm;
-            commands.trigger(TabFontChanged::from_font(entity, font, defaults.font_size));
+        for entity in reader_tabs.iter() {
+            commands.entity(entity).insert((
+                TabFontSettings::from_font(font, defaults.font_size),
+                TabWpm(defaults.wpm),
+            ));
         }
     }
 }

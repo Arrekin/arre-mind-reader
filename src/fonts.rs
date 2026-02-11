@@ -21,6 +21,7 @@ const BUILT_IN_FONTS: &[&str] = &[
     "UbuntuMono-Regular.ttf",
 ];
 
+#[derive(Clone)]
 pub struct FontData {
     pub name: String,
     pub handle: Handle<Font>,

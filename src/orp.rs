@@ -8,7 +8,7 @@ use bevy::prelude::*;
 use bevy::sprite::Anchor;
 
 use crate::reader::WordChanged;
-use crate::tabs::{ActiveTab, Content, ReaderTab, TabFontChanged};
+use crate::tabs::{ActiveTab, Content, HomepageTab, ReaderTab, TabFontSettings};
 
 /// Approximate ratio of character width to font size for monospace-like positioning.
 /// Used to offset left/right text so they abut the center ORP character.
@@ -19,9 +19,10 @@ impl Plugin for OrpPlugin {
     fn build(&self, app: &mut App) {
         app
             .add_systems(Startup, setup_orp_display)
-            .add_observer(on_word_changed)
-            .add_observer(on_font_changed)
-            .add_observer(on_active_tab_changed)
+            .add_observer(OrpSegment::on_word_changed)
+            .add_observer(OrpSegment::on_font_settings_inserted)
+            .add_observer(ReaderDisplay::on_reader_tab_activated)
+            .add_observer(ReaderDisplay::on_homepage_tab_activated)
             ;
     }
 }
@@ -37,12 +38,83 @@ const RETICLE_ALPHA: f32 = 0.5;
 
 #[derive(Component)]
 pub struct ReaderDisplay;
+impl ReaderDisplay {
+    fn on_reader_tab_activated(
+        _trigger: On<Insert, ActiveTab>,
+        mut commands: Commands,
+        active_reader: Single<(Entity, &TabFontSettings), (With<ActiveTab>, With<ReaderTab>)>,
+        mut displays: Query<&mut Visibility, With<ReaderDisplay>>,
+    ) {
+        let (entity, font_settings) = active_reader.into_inner();
+        for mut visibility in displays.iter_mut() {
+            *visibility = Visibility::Inherited;
+        }
+        commands.entity(entity).insert(TabFontSettings::from_font(&font_settings.font, font_settings.font_size));
+    }
+
+    fn on_homepage_tab_activated(
+        _trigger: On<Insert, ActiveTab>,
+        _active_homepage: Single<Entity, (With<ActiveTab>, With<HomepageTab>)>,
+        mut displays: Query<&mut Visibility, With<ReaderDisplay>>,
+    ) {
+        for mut visibility in displays.iter_mut() {
+            *visibility = Visibility::Hidden;
+        }
+    }
+}
 
 #[derive(Component, PartialEq)]
 enum OrpSegment {
     Left,
     Center,
     Right,
+}
+impl OrpSegment {
+    fn on_word_changed(
+        _trigger: On<WordChanged>,
+        active_tab: Single<&Content, With<ActiveTab>>,
+        mut segments: Query<(&mut Text2d, &OrpSegment)>,
+    ) {
+        let Some(word) = active_tab.into_inner().current_word() else { return };
+        
+        let chars: Vec<char> = word.text.chars().collect();
+        let orp_index = word.orp_index();
+        
+        // Split word into three parts around the ORP letter. The center char stays at x=0,
+        // left text grows rightward toward center (Anchor::CenterRight), and right text
+        // grows leftward away from center (Anchor::CenterLeft).
+        let mut left: String = chars[..orp_index].iter().collect();
+        let mut center: String = chars.get(orp_index).map(|c| c.to_string()).unwrap_or_default();
+        let mut right: String = chars.get(orp_index + 1..).map(|s| s.iter().collect()).unwrap_or_default();
+        
+        for (mut text, segment) in segments.iter_mut() {
+            **text = match segment {
+                OrpSegment::Left => std::mem::take(&mut left),
+                OrpSegment::Center => std::mem::take(&mut center),
+                OrpSegment::Right => std::mem::take(&mut right),
+            };
+        }
+    }
+
+    fn on_font_settings_inserted(
+        _trigger: On<Insert, TabFontSettings>,
+        font_settings: Single<&TabFontSettings, With<ActiveTab>>,
+        mut segments: Query<(&mut TextFont, &mut Transform, &OrpSegment)>,
+    ) {
+        // half_char = half the estimated width of the center character,
+        // so left/right text edges meet the center character's edges.
+        let half_char = font_settings.font_size * CHAR_WIDTH_RATIO * 0.5;
+
+        for (mut font, mut transform, segment) in segments.iter_mut() {
+            font.font_size = font_settings.font_size;
+            font.font = font_settings.font.handle.clone();
+            match segment {
+                OrpSegment::Left => transform.translation.x = -half_char,
+                OrpSegment::Center => {},
+                OrpSegment::Right => transform.translation.x = half_char,
+            }
+        }
+    }
 }
 
 #[derive(Component)]
@@ -106,62 +178,3 @@ fn setup_orp_display(
     ));
 }
 
-fn on_active_tab_changed(
-    _trigger: On<Add, ActiveTab>,
-    active_tab: Single<Entity, With<ActiveTab>>,
-    reader_tabs: Query<(), With<ReaderTab>>,
-    mut displays: Query<&mut Visibility, With<ReaderDisplay>>,
-) {
-    let is_reader = reader_tabs.get(active_tab.into_inner()).is_ok();
-    let target_visibility = if is_reader { Visibility::Inherited } else { Visibility::Hidden };
-    for mut visibility in displays.iter_mut() {
-        *visibility = target_visibility;
-    }
-}
-
-fn on_word_changed(
-    _trigger: On<WordChanged>,
-    active_tab: Single<&Content, With<ActiveTab>>,
-    mut segments: Query<(&mut Text2d, &OrpSegment)>,
-) {
-    let Some(word) = active_tab.into_inner().current_word() else { return };
-    
-    let chars: Vec<char> = word.text.chars().collect();
-    let orp_index = word.orp_index();
-    
-    // Split word into three parts around the ORP letter. The center char stays at x=0,
-    // left text grows rightward toward center (Anchor::CenterRight), and right text
-    // grows leftward away from center (Anchor::CenterLeft).
-    let mut left: String = chars[..orp_index].iter().collect();
-    let mut center: String = chars.get(orp_index).map(|c| c.to_string()).unwrap_or_default();
-    let mut right: String = chars.get(orp_index + 1..).map(|s| s.iter().collect()).unwrap_or_default();
-    
-    for (mut text, segment) in segments.iter_mut() {
-        **text = match segment {
-            OrpSegment::Left => std::mem::take(&mut left),
-            OrpSegment::Center => std::mem::take(&mut center),
-            OrpSegment::Right => std::mem::take(&mut right),
-        };
-    }
-}
-
-fn on_font_changed(
-    trigger: On<TabFontChanged>,
-    mut segments: Query<(&mut TextFont, &mut Transform, &OrpSegment)>,
-) {
-    let font_handle = trigger.handle.clone();
-    let font_size = trigger.size;
-    // half_char = half the estimated width of the center character,
-    // so left/right text edges meet the center character's edges.
-    let half_char = font_size * CHAR_WIDTH_RATIO * 0.5;
-    
-    for (mut font, mut transform, segment) in segments.iter_mut() {
-        font.font_size = font_size;
-        font.font = font_handle.clone();
-        match segment {
-            OrpSegment::Left => transform.translation.x = -half_char,
-            OrpSegment::Center => {},
-            OrpSegment::Right => transform.translation.x = half_char,
-        }
-    }
-}

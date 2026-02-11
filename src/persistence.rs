@@ -312,7 +312,7 @@ fn persist_program_state(
             SavedTab {
                 name: name.to_string(),
                 file_path: file_path.map(|fp| fp.0.clone()),
-                font_name: font_settings.font_name.clone(),
+                font_name: font_settings.font.name.clone(),
                 font_size: font_settings.font_size,
                 wpm: wpm.0,
                 content_cache_id: content.content_cache_id.clone(),
