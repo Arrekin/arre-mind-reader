@@ -21,12 +21,15 @@ const BUILT_IN_FONTS: &[&str] = &[
     "UbuntuMono-Regular.ttf",
 ];
 
+/// A loaded font: its filename (used as display name) paired with the Bevy asset handle.
 #[derive(Clone)]
 pub struct FontData {
     pub name: String,
     pub handle: Handle<Font>,
 }
 
+/// Central registry of available fonts. Guaranteed non-empty after startup.
+/// The first font in the sorted list serves as the default.
 #[derive(Resource, Default)]
 pub struct FontsStore {
     fonts: Vec<FontData>,
@@ -45,6 +48,8 @@ impl FontsStore {
     pub fn iter(&self) -> impl Iterator<Item = &FontData> {
         self.fonts.iter()
     }
+    /// Loads built-in fonts and (on native) discovers additional .ttf/.otf files
+    /// dropped into assets/fonts. Fonts are sorted alphabetically by filename.
     fn load_fonts(
         mut fonts_store: ResMut<FontsStore>,
         asset_server: Res<AssetServer>,

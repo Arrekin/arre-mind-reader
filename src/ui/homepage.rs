@@ -36,6 +36,7 @@ pub struct TileVisuals {
 #[derive(Component)]
 pub struct HomepageTile;
 impl HomepageTile {
+    /// Run condition: returns true when the homepage tab is active.
     pub fn is_active(
         query: Option<Single<Entity, (With<HomepageTab>, With<ActiveTab>)>>,
     ) -> bool {
@@ -76,6 +77,8 @@ impl HomepageTile {
         ));
     }
 
+    /// Draws an empty `CentralPanel` so egui captures background clicks
+    /// and the window has a consistent fill behind the tiles.
     pub fn background(mut contexts: EguiContexts) {
         let Ok(ctx) = contexts.ctx_mut() else { return };
         egui::CentralPanel::default()
@@ -240,6 +243,8 @@ impl TipsTile {
 
 // ── Shared frame helper ─────────────────────────────────────────────────────
 
+/// Renders the shared chrome for a homepage tile: positioned `egui::Area` with
+/// colored background, rounded corners, title heading, and separator.
 fn tile_frame(
     ctx: &egui::Context,
     id: &str,

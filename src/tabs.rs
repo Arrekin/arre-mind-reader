@@ -16,7 +16,7 @@ impl Plugin for TabsPlugin {
         app
             .init_resource::<TabOrder>()
             .init_resource::<DefaultTabSettings>()
-            .add_systems(Startup, spawn_homepage_tab)
+            .add_systems(Startup, HomepageTab::spawn)
             .add_observer(TabSelect::on_trigger)
             .add_observer(TabClose::on_trigger)
             .add_observer(TabCreateRequest::on_trigger)
@@ -31,6 +31,9 @@ impl Plugin for TabsPlugin {
 // Resources
 // ============================================================================
 
+/// Defaults applied to newly created tabs and used by "Apply to all tabs".
+/// Serialized to disk as part of `ProgramState`. Stores `font_name` as a string
+/// (not `FontData`) because font handles are runtime-only.
 #[derive(Resource, Clone, Serialize, Deserialize)]
 pub struct DefaultTabSettings {
     pub font_name: String,
@@ -76,19 +79,34 @@ impl TabOrder {
 // Components
 // ============================================================================
 
+/// Marker for the single currently-active tab.
 #[derive(Component)]
 #[component(storage = "SparseSet")]
 pub struct ActiveTab;
 
+/// Present on every tab entity. `TabOrder` tracks entities via Add/Remove
+/// observers on this component.
 #[derive(Component)]
 pub struct TabMarker;
 
 #[derive(Component)]
 pub struct HomepageTab;
+impl HomepageTab {
+    fn spawn(mut commands: Commands) {
+        commands.spawn((
+            TabMarker,
+            HomepageTab,
+            Name::new("🏠"),
+            ActiveTab,
+        ));
+    }
+}
 
 #[derive(Component)]
 pub struct ReaderTab;
 
+/// Per-tab font configuration. Inserting this component on the active tab
+/// triggers the ORP font update observer in `orp.rs`.
 #[derive(Component)]
 pub struct TabFontSettings {
     pub font: FontData,
@@ -116,11 +134,13 @@ pub struct Content {
     pub current_index: usize,
 }
 impl Content {
+    /// Creates new content and writes the word cache to disk immediately.
     pub fn new(words: Vec<Word>) -> Self {
         let content_cache_id = ProgramState::generate_cache_id();
         ProgramState::write_word_cache(&content_cache_id, &words);
         Self { content_cache_id, words, current_index: 0 }
     }
+    /// Restores content from an existing cache (skips cache write).
     pub fn new_from_loaded(content_cache_id: String, words: Vec<Word>, current_index: usize) -> Self {
         Self { content_cache_id, words, current_index }
     }
@@ -168,6 +188,8 @@ pub struct TabSelect {
     pub entity: Entity,
 }
 impl TabSelect {
+    /// Moves `ActiveTab` to the target entity and fires `WordChanged`
+    /// so the ORP display and reading timer sync to the new tab's state.
     fn on_trigger(
         trigger: On<TabSelect>,
         mut commands: Commands,
@@ -195,6 +217,8 @@ pub struct TabClose {
     pub entity: Entity,
 }
 impl TabClose {
+    /// Despawns the tab, cleans up its word cache, and auto-selects
+    /// an adjacent tab if the closed tab was active.
     fn on_trigger(
         trigger: On<TabClose>,
         mut commands: Commands,
@@ -220,7 +244,9 @@ impl From<Entity> for TabClose {
     }
 }
 
-
+/// Builder-pattern event for creating reader tabs. Optional fields fall back
+/// to `DefaultTabSettings`. The observer spawns the entity and optionally
+/// triggers `TabSelect` to make it active.
 #[derive(Event)]
 pub struct TabCreateRequest {
     pub name: String,
@@ -290,6 +316,7 @@ impl TabCreateRequest {
     }
 }
 
+/// Overwrites font and WPM on every reader tab with current `DefaultTabSettings`.
 #[derive(Event)]
 pub struct ApplyDefaultsToAll;
 impl ApplyDefaultsToAll {
@@ -311,15 +338,3 @@ impl ApplyDefaultsToAll {
     }
 }
 
-// ============================================================================
-// Startup Systems
-// ============================================================================
-
-fn spawn_homepage_tab(mut commands: Commands) {
-    commands.spawn((
-        TabMarker,
-        HomepageTab,
-        Name::new("🏠"),
-        ActiveTab,
-    ));
-}

@@ -20,11 +20,14 @@ pub struct NewTabDialog {
     pub text_input: String,
 }
 
+/// Holds the async file-pick task spawned by the new tab dialog.
+/// Polled every frame by `poll_file_load_task`.
 #[derive(Resource, Default)]
 pub struct PendingFileLoad {
     pub task: Option<Task<Option<RawFileLoad>>>,
 }
 
+/// Raw bytes returned by the async file dialog, before parsing.
 pub struct RawFileLoad {
     pub file_name: String,
     pub bytes: Vec<u8>,
@@ -120,6 +123,9 @@ pub fn new_tab_dialog_system(
         });
 }
 
+/// Polls the async file-pick task each frame. On completion, parses the file
+/// and triggers `TabCreateRequest`. Runs in `Update` (not egui pass) because
+/// it doesn't need egui context.
 pub fn poll_file_load_task(
     mut commands: Commands,
     mut pending_load: ResMut<PendingFileLoad>,

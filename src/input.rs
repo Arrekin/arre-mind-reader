@@ -17,6 +17,8 @@ impl Plugin for InputPlugin {
     }
 }
 
+/// Maps keyboard shortcuts to `PlaybackCommand` events.
+/// Skips input when egui has keyboard focus (e.g. text fields in dialogs).
 fn handle_input(
     mut commands: Commands,
     keyboard: Res<ButtonInput<KeyCode>>,

@@ -36,9 +36,12 @@ const RETICLE_ALPHA: f32 = 0.5;
 // Components
 // ============================================================================
 
+/// Marker on all ORP display entities (reticles and text segments).
+/// Used to toggle visibility when switching between reader and homepage tabs.
 #[derive(Component)]
 pub struct ReaderDisplay;
 impl ReaderDisplay {
+    /// Shows the ORP display and re-inserts the tab's existing `TabFontSettings`
     fn on_reader_tab_activated(
         _trigger: On<Insert, ActiveTab>,
         mut commands: Commands,
@@ -52,6 +55,7 @@ impl ReaderDisplay {
         commands.entity(entity).insert(TabFontSettings::from_font(&font_settings.font, font_settings.font_size));
     }
 
+    /// Hides the ORP display when a non-reader tab becomes active.
     fn on_homepage_tab_activated(
         _trigger: On<Insert, ActiveTab>,
         _active_homepage: Single<Entity, (With<ActiveTab>, With<HomepageTab>)>,
@@ -63,6 +67,7 @@ impl ReaderDisplay {
     }
 }
 
+/// Identifies which part of the three-entity word display this entity renders.
 #[derive(Component, PartialEq)]
 enum OrpSegment {
     Left,
@@ -70,6 +75,8 @@ enum OrpSegment {
     Right,
 }
 impl OrpSegment {
+    /// Splits the current word at the ORP index into three strings and assigns
+    /// each to its corresponding text entity.
     fn on_word_changed(
         _trigger: On<WordChanged>,
         active_tab: Single<&Content, With<ActiveTab>>,
@@ -96,6 +103,9 @@ impl OrpSegment {
         }
     }
 
+    /// Single source of truth for applying font to the ORP display.
+    /// Updates font handle, size, and repositions Left/Right segments
+    /// based on estimated character width.
     fn on_font_settings_inserted(
         _trigger: On<Insert, TabFontSettings>,
         font_settings: Single<&TabFontSettings, With<ActiveTab>>,
@@ -117,6 +127,7 @@ impl OrpSegment {
     }
 }
 
+/// Visual alignment guides (thin red bars) above and below the ORP letter.
 #[derive(Component)]
 struct ReticleMarker;
 

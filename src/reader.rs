@@ -18,7 +18,7 @@ impl Plugin for ReaderPlugin {
     fn build(&self, app: &mut App) {
         app.init_state::<ReadingState>()
             .init_resource::<ReadingTimer>()
-            .add_systems(Update, ReadingState::tick.run_if(in_state(ReadingState::Playing)))
+            .add_systems(Update, ReadingTimer::tick.run_if(in_state(ReadingState::Playing)))
             .add_systems(OnEnter(ReadingState::Playing), ReadingState::on_start_playing)
             .add_observer(WordChanged::on_trigger)
             ;
@@ -26,6 +26,7 @@ impl Plugin for ReaderPlugin {
 }
 
 
+/// Playback state machine. Transitions driven by `PlaybackCommand` events.
 #[derive(States, Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub enum ReadingState {
     #[default]
@@ -34,18 +35,28 @@ pub enum ReadingState {
     Paused,
 }
 impl ReadingState {
+    /// Fires `WordChanged` on play start so the timer is initialized
+    /// for the current word (which may have been changed while paused/idle).
     fn on_start_playing(mut commands: Commands) {
         commands.trigger(WordChanged);
     }
+}
 
-    /// Advances words when the per-word timer expires, then signals WordChanged
+/// Per-word countdown. Reset by the `WordChanged` observer to the current
+/// word's display duration. When it expires, `tick` advances to the next word.
+#[derive(Resource, Default)]
+pub struct ReadingTimer {
+    pub timer: Timer,
+}
+impl ReadingTimer {
+    /// Advances words when the per-word timer expires, then signals `WordChanged`
     /// so the timer is reset for the next word by the observer.
     fn tick(
-        time: Res<Time>,
         mut commands: Commands,
+        time: Res<Time>,
         mut timer: ResMut<ReadingTimer>,
-        active_tab: Single<&mut Content, (With<ActiveTab>, With<ReaderTab>)>,
         mut next_state: ResMut<NextState<ReadingState>>,
+        active_tab: Single<&mut Content, (With<ActiveTab>, With<ReaderTab>)>,
     ) {
         timer.timer.tick(time.delta());
         
@@ -58,11 +69,6 @@ impl ReadingState {
             }
         }
     }
-}
-
-#[derive(Resource, Default)]
-pub struct ReadingTimer {
-    pub timer: Timer,
 }
 
 /// Fired whenever the current word changes (advance, skip, restart, tab switch).

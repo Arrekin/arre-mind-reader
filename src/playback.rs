@@ -22,6 +22,8 @@ const WORD_SKIP_AMOUNT: usize = 5;
 // Playback Commands
 // ============================================================================
 
+/// All playback actions, dispatched from keyboard input and UI controls.
+/// Processed by a single observer that routes to state transitions and content mutations.
 #[derive(Event)]
 pub enum PlaybackCommand {
     TogglePlayPause,
@@ -39,6 +41,8 @@ impl PlaybackCommand {
     pub fn skip_backward() -> Self {
         Self::SkipBackward(WORD_SKIP_AMOUNT)
     }
+    /// Central command handler. Uses `Query` (not `Single`) for `active_tabs` because
+    /// some commands (e.g. `Stop`) are valid even without an active reader tab.
     fn on_trigger(
         trigger: On<PlaybackCommand>,
         mut commands: Commands,

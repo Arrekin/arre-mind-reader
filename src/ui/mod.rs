@@ -31,7 +31,7 @@ impl Plugin for UiPlugin {
                     homepage::ShortcutsTile::update,
                     homepage::StatsTile::update,
                     homepage::TipsTile::update,
-                ).chain().run_if(homepage::HomepageTile::is_active),
+                ).run_if(homepage::HomepageTile::is_active),
             ).chain())
             ;
     }

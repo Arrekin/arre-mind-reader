@@ -33,6 +33,8 @@ const SAVE_INTERVAL_SECS: f32 = 5.0;
 // Persistence-only Data Structures
 // ============================================================================
 
+/// Serialization-only mirror of a reader tab's ECS components.
+/// Font is stored as a name string (resolved back to `FontData` on load).
 #[derive(Serialize, Deserialize)]
 struct SavedTab {
     name: String,
@@ -45,12 +47,16 @@ struct SavedTab {
     is_active: bool,
 }
 
+/// Root serialization structure written to `tabs.ron`.
+/// Contains all reader tabs and the global default settings.
 #[derive(Serialize, Deserialize, Default)]
 pub struct ProgramState {
     tabs: Vec<SavedTab>,
     defaults: DefaultTabSettings,
 }
 impl ProgramState {
+    /// Generates a unique ID using timestamp + atomic counter.
+    /// Used as both the filename for disk cache and the key for localStorage.
     pub fn generate_cache_id() -> String {
         use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -108,6 +114,8 @@ impl ProgramState {
             let _ = std::fs::remove_file(path);
         }
     }
+    /// Removes cache files not referenced by any saved tab.
+    /// Prevents unbounded disk growth from closed/abandoned tabs.
     fn cleanup_orphan_caches(valid_ids: &HashSet<String>) {
         let Some(dir) = Self::cache_dir() else { return };
         let Ok(entries) = std::fs::read_dir(&dir) else { return };
@@ -249,6 +257,9 @@ impl Default for TabSaveTimer {
 // Systems
 // ============================================================================
 
+/// Restores tabs from the last saved `ProgramState`. Runs at `PostStartup`
+/// (after fonts are loaded) so `FontsStore::resolve` can validate font names.
+/// Also cleans up orphan word caches from previously-closed tabs.
 fn spawn_tabs_from_program_state(
     mut commands: Commands,
     mut defaults: ResMut<DefaultTabSettings>,
@@ -290,6 +301,7 @@ fn spawn_tabs_from_program_state(
     info!("Restored {}/{} tabs from saved state", restored, total_tabs);
 }
 
+/// Snapshots all reader tab state to disk on a timer and on app exit.
 fn persist_program_state(
     time: Res<Time>,
     mut save_timer: ResMut<TabSaveTimer>,

@@ -24,6 +24,7 @@ impl Plugin for TextPlugin {
     }
 }
 
+/// Maps file extensions to their `TextParser` implementations.
 #[derive(Resource)]
 pub struct FileParsers {
     parsers: HashMap<String, Arc<dyn TextParser>>,
@@ -54,9 +55,13 @@ impl FileParsers {
         self.parsers.keys().cloned().collect()
     }
 }
+/// Single display unit for the reader. Each word is shown for a duration
+/// based on WPM and punctuation/length multipliers.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Word {
     pub text: String,
+    /// When true, an extra pause is applied after this word (set on the
+    /// last word before a blank line, not the first word after).
     pub is_paragraph_end: bool,
 }
 
@@ -101,6 +106,7 @@ impl Word {
     }
 }
 
+/// Chapter/section bookmark for future navigation UI.
 #[allow(dead_code)]
 pub struct Section {
     pub title: String,
