@@ -9,9 +9,10 @@ use bevy::log::{debug, info, warn};
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
+use crate::fonts::FontsStore;
 use crate::tabs::{
-    ActiveTab, Content, ReaderTab, TabCreateRequest, TabFilePath, TabFontSettings,
-    TabMarker, TabWpm,
+    ActiveTab, Content, DefaultTabSettings, ReaderTab, TabCreateRequest, TabFilePath,
+    TabFontSettings, TabMarker, TabWpm,
 };
 use crate::text::Word;
 
@@ -47,6 +48,7 @@ struct SavedTab {
 #[derive(Serialize, Deserialize, Default)]
 pub struct ProgramState {
     tabs: Vec<SavedTab>,
+    defaults: DefaultTabSettings,
 }
 impl ProgramState {
     pub fn generate_cache_id() -> String {
@@ -247,8 +249,19 @@ impl Default for TabSaveTimer {
 // Systems
 // ============================================================================
 
-fn spawn_tabs_from_program_state(mut commands: Commands) {
+fn spawn_tabs_from_program_state(
+    mut commands: Commands,
+    mut defaults: ResMut<DefaultTabSettings>,
+    fonts: Res<FontsStore>,
+) {
     let program_state = ProgramState::load();
+
+    *defaults = program_state.defaults.clone();
+    if defaults.font_name.is_empty() {
+        if let Some(font) = fonts.default_font() {
+            defaults.font_name = font.name.clone();
+        }
+    }
     let total_tabs = program_state.tabs.len();
 
     let valid_ids: HashSet<String> = program_state.tabs.iter()
@@ -284,6 +297,7 @@ fn persist_program_state(
     time: Res<Time>,
     mut save_timer: ResMut<TabSaveTimer>,
     app_exit_events: MessageReader<AppExit>,
+    defaults: Res<DefaultTabSettings>,
     tabs: Query<(
         &Name,
         &TabFontSettings,
@@ -311,6 +325,9 @@ fn persist_program_state(
         })
         .collect();
 
-    ProgramState { tabs: saved_tabs }.save();
+    ProgramState {
+        tabs: saved_tabs,
+        defaults: defaults.clone(),
+    }.save();
     info!("The program state was saved");
 }

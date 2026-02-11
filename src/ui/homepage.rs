@@ -123,9 +123,7 @@ impl FontSettingsTile {
         let Ok(ctx) = contexts.ctx_mut() else { return };
         let (position, size, visuals) = tile.into_inner();
 
-        let effective_font_name = defaults.font_name.clone()
-            .or_else(|| fonts.default_font().map(|f| f.name.clone()))
-            .unwrap_or_default();
+        let effective_font_name = defaults.font_name.clone();
 
         tile_frame(ctx, "font_settings", position, size, visuals, |ui| {
             ui.label("Font:");
@@ -139,7 +137,7 @@ impl FontSettingsTile {
                             effective_font_name == font_data.name,
                             &font_data.name,
                         ).clicked() {
-                            defaults.font_name = Some(font_data.name.clone());
+                            defaults.font_name = font_data.name.clone();
                         }
                     }
                 });

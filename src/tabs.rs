@@ -3,6 +3,7 @@
 //! Provides tab components, bundles, entity events, and observers for reactive tab management.
 
 use bevy::prelude::*;
+use serde::{Deserialize, Serialize};
 
 use crate::fonts::FontsStore;
 use crate::persistence::ProgramState;
@@ -31,16 +32,16 @@ impl Plugin for TabsPlugin {
 // Resources
 // ============================================================================
 
-#[derive(Resource)]
+#[derive(Resource, Clone, Serialize, Deserialize)]
 pub struct DefaultTabSettings {
-    pub font_name: Option<String>,
+    pub font_name: String,
     pub font_size: f32,
     pub wpm: u32,
 }
 impl Default for DefaultTabSettings {
     fn default() -> Self {
         Self {
-            font_name: None,
+            font_name: String::new(),
             font_size: FONT_SIZE_DEFAULT,
             wpm: WPM_DEFAULT,
         }
@@ -292,7 +293,7 @@ impl TabCreateRequest {
         // Resolve font: explicit request → default settings → first available font
         let font_data = trigger.font_name.as_ref()
             .and_then(|name| fonts.get_by_name(name))
-            .or_else(|| defaults.font_name.as_ref().and_then(|name| fonts.get_by_name(name)))
+            .or_else(|| fonts.get_by_name(&defaults.font_name))
             .or_else(|| fonts.default_font());
         let font_name = font_data.map(|f| f.name.clone()).unwrap_or_default();
         let font_handle = font_data.map(|f| f.handle.clone()).unwrap_or_default();
@@ -333,8 +334,7 @@ impl ApplyDefaultsToAll {
         fonts: Res<FontsStore>,
         mut reader_tabs: Query<(Entity, &mut TabWpm), With<ReaderTab>>,
     ) {
-        let font_data = defaults.font_name.as_ref()
-            .and_then(|name| fonts.get_by_name(name))
+        let font_data = fonts.get_by_name(&defaults.font_name)
             .or_else(|| fonts.default_font());
         let font_name = font_data.map(|f| f.name.clone()).unwrap_or_default();
         let font_handle = font_data.map(|f| f.handle.clone()).unwrap_or_default();
