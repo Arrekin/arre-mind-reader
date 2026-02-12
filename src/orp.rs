@@ -23,13 +23,14 @@ impl Plugin for OrpPlugin {
             .add_observer(OrpSegment::on_font_settings_inserted)
             .add_observer(ReaderDisplay::on_reader_tab_activated)
             .add_observer(ReaderDisplay::on_homepage_tab_activated)
+            .add_observer(ReticleMarker::on_font_settings_inserted)
             ;
     }
 }
 
-const RETICLE_OFFSET_Y: f32 = 40.0;
-const RETICLE_WIDTH: f32 = 3.0;
-const RETICLE_HEIGHT: f32 = 40.0;
+const RETICLE_OFFSET_Y_RATIO: f32 = 0.833;
+const RETICLE_WIDTH_RATIO: f32 = 0.0625;
+const RETICLE_HEIGHT_RATIO: f32 = 0.833;
 const RETICLE_ALPHA: f32 = 0.5;
 
 // ============================================================================
@@ -131,6 +132,23 @@ impl OrpSegment {
 /// Visual alignment guides (thin red bars) above and below the ORP letter.
 #[derive(Component)]
 struct ReticleMarker;
+impl ReticleMarker {
+    fn on_font_settings_inserted(
+        _trigger: On<Insert, TabFontSettings>,
+        font_settings: Single<&TabFontSettings, With<ActiveTab>>,
+        mut reticles: Query<(&mut Sprite, &mut Transform), With<ReticleMarker>>,
+    ) {
+        let size = font_settings.font_size;
+        let offset_y = size * RETICLE_OFFSET_Y_RATIO;
+        let reticle_size = Vec2::new(size * RETICLE_WIDTH_RATIO, size * RETICLE_HEIGHT_RATIO);
+
+        for (mut sprite, mut transform) in reticles.iter_mut() {
+            sprite.custom_size = Some(reticle_size);
+            let sign = transform.translation.y.signum();
+            transform.translation.y = sign * offset_y;
+        }
+    }
+}
 
 // ============================================================================
 // Systems
@@ -139,13 +157,15 @@ struct ReticleMarker;
 fn setup_orp_display(
     mut commands: Commands,
 ) {
+    let default_size = crate::reader::FONT_SIZE_DEFAULT;
     let reticle_color = RED.with_alpha(RETICLE_ALPHA);
-    let reticle_size = Vec2::new(RETICLE_WIDTH, RETICLE_HEIGHT);
+    let reticle_size = Vec2::new(default_size * RETICLE_WIDTH_RATIO, default_size * RETICLE_HEIGHT_RATIO);
+    let offset_y = default_size * RETICLE_OFFSET_Y_RATIO;
     
     // Top reticle
     commands.spawn((
         Sprite::from_color(reticle_color, reticle_size),
-        Transform::from_xyz(0.0, RETICLE_OFFSET_Y, 0.0),
+        Transform::from_xyz(0.0, offset_y, 0.0),
         ReticleMarker,
         ReaderDisplay,
         Visibility::Hidden,
@@ -153,7 +173,7 @@ fn setup_orp_display(
     // Bottom reticle
     commands.spawn((
         Sprite::from_color(reticle_color, reticle_size),
-        Transform::from_xyz(0.0, -RETICLE_OFFSET_Y, 0.0),
+        Transform::from_xyz(0.0, -offset_y, 0.0),
         ReticleMarker,
         ReaderDisplay,
         Visibility::Hidden,
