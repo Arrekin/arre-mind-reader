@@ -87,13 +87,17 @@ impl NewTabDialog {
                 ui.horizontal(|ui| {
                     let can_create = !dialog.text_input.trim().is_empty() && !is_loading;
                     if ui.add_enabled(can_create, egui::Button::new("Create Tab")).clicked() {
-                        let parser = file_parsers.get_for_extension("txt").unwrap();
-                        let parsed = parser.parse(dialog.text_input.as_bytes()).unwrap();
-                        let tab_count = tabs.iter().count();
-                        let name = format!("Text {}", tab_count + 1);
-                        
-                        commands.trigger(TabCreateRequest::new(name, Content::new(parsed.words)));
-                        
+                        if let Some(parser) = file_parsers.get_for_extension("txt") {
+                            match parser.parse(dialog.text_input.as_bytes()) {
+                                Ok(parsed) if !parsed.words.is_empty() => {
+                                    let tab_count = tabs.iter().count();
+                                    let name = format!("Text {}", tab_count + 1);
+                                    commands.trigger(TabCreateRequest::new(name, Content::new(parsed.words)));
+                                }
+                                Ok(_) => warn!("Pasted text produced no words"),
+                                Err(e) => warn!("Failed to parse pasted text: {}", e),
+                            }
+                        }
                         dialog.open = false;
                         dialog.text_input.clear();
                     }
@@ -134,20 +138,19 @@ impl PendingFileLoad {
                 
                 if let Some(parser) = file_parsers.get_for_path(path) {
                     match parser.parse(&raw.bytes) {
-                        Ok(parsed) => {
+                        Ok(parsed) if !parsed.words.is_empty() => {
                             commands.trigger(
                                 TabCreateRequest::new(tab_name, Content::new(parsed.words))
                                     .with_file_path(raw.file_name)
                             );
-                            dialog.open = false;
                         }
-                        Err(e) => {
-                            warn!("Failed to parse '{}': {}", raw.file_name, e);
-                        }
+                        Ok(_) => warn!("File '{}' produced no words", raw.file_name),
+                        Err(e) => warn!("Failed to parse '{}': {}", raw.file_name, e),
                     }
                 } else {
                     warn!("No parser found for '{}'", raw.file_name);
                 }
+                dialog.open = false;
             }
             pending_load.task = None;
         }

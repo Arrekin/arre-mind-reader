@@ -27,7 +27,6 @@ const WORD_SKIP_AMOUNT: usize = 5;
 #[derive(Event)]
 pub enum PlaybackCommand {
     TogglePlayPause,
-    Stop,
     Restart,
     SkipForward(usize),
     SkipBackward(usize),
@@ -62,9 +61,6 @@ impl PlaybackCommand {
                         }
                     }
                 }
-            }
-            PlaybackCommand::Stop => {
-                next_state.set(ReadingState::Idle);
             }
             PlaybackCommand::Restart => {
                 if let Ok((_, mut content)) = active_tabs.single_mut() {

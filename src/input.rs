@@ -33,11 +33,6 @@ fn handle_input(
         commands.trigger(PlaybackCommand::TogglePlayPause);
     }
     
-    // Escape: stop
-    if keyboard.just_pressed(KeyCode::Escape) {
-        commands.trigger(PlaybackCommand::Stop);
-    }
-    
     // R: restart
     if keyboard.just_pressed(KeyCode::KeyR) {
         commands.trigger(PlaybackCommand::Restart);

@@ -28,8 +28,8 @@ pub fn controls_system(
             };
             let at_end = content.has_words() && content.is_at_end();
             let (btn_text, btn_cmd) = match (current_state.get(), at_end) {
+                (_, true) => ("↺ Restart", PlaybackCommand::Restart),
                 (ReadingState::Playing, _) => ("⏸ Pause", PlaybackCommand::TogglePlayPause),
-                (ReadingState::Idle, true) => ("↺ Restart", PlaybackCommand::Restart),
                 _ => ("▶ Play", PlaybackCommand::TogglePlayPause),
             };
             let btn = egui::Button::new(btn_text);
