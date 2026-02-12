@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::fonts::{FontData, FontsStore};
 use crate::persistence::ProgramState;
-use crate::reader::{FONT_SIZE_DEFAULT, WPM_DEFAULT};
+use crate::reader::{ContentNavigate, FONT_SIZE_DEFAULT, ReadingState, WordChanged, WPM_DEFAULT};
 use crate::text::Word;
 
 pub struct TabsPlugin;
@@ -23,6 +23,7 @@ impl Plugin for TabsPlugin {
             .add_observer(ApplyDefaultsToAll::on_trigger)
             .add_observer(TabOrder::on_tab_added)
             .add_observer(TabOrder::on_tab_removed)
+            .add_observer(Content::on_navigate)
             ;
     }
 }
@@ -150,9 +151,8 @@ impl Content {
     pub fn current_word(&self) -> Option<&Word> {
         self.words.get(self.current_index)
     }
-    /// Returns (current 1-indexed, total) for UI display.
     pub fn progress(&self) -> (usize, usize) {
-        (self.current_index + 1, self.words.len())
+        (self.current_index, self.words.len())
     }
     pub fn skip_forward(&mut self, amount: usize) {
         self.current_index = (self.current_index + amount)
@@ -160,6 +160,9 @@ impl Content {
     }
     pub fn skip_backward(&mut self, amount: usize) {
         self.current_index = self.current_index.saturating_sub(amount);
+    }
+    pub fn seek(&mut self, index: usize) {
+        self.current_index = index.min(self.words.len().saturating_sub(1));
     }
     pub fn restart(&mut self) {
         self.current_index = 0;
@@ -174,6 +177,27 @@ impl Content {
             true
         } else {
             false
+        }
+    }
+    pub fn on_navigate(
+        trigger: On<ContentNavigate>,
+        mut commands: Commands,
+        mut next_state: ResMut<NextState<ReadingState>>,
+        active_tab: Single<&mut Content, (With<ActiveTab>, With<ReaderTab>)>,
+    ) {
+        let mut content = active_tab.into_inner();
+        match trigger.event() {
+            ContentNavigate::Advance => {
+                if content.advance() {
+                    commands.trigger(WordChanged);
+                } else {
+                    next_state.set(ReadingState::Idle);
+                }
+            }
+            ContentNavigate::Seek(index) => {
+                content.seek(*index);
+                commands.trigger(WordChanged);
+            }
         }
     }
 }
@@ -193,9 +217,11 @@ impl TabSelect {
     fn on_trigger(
         trigger: On<TabSelect>,
         mut commands: Commands,
+        mut next_state: ResMut<NextState<ReadingState>>,
         active_tab: Option<Single<Entity, With<ActiveTab>>>,
     ) {
         let target = trigger.entity;
+        next_state.set(ReadingState::Idle);
         
         if let Some(current_active) = active_tab {
             commands.entity(current_active.into_inner()).remove::<ActiveTab>();

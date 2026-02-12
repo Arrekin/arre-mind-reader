@@ -8,7 +8,7 @@ use bevy_egui::{EguiContexts, egui};
 
 use crate::fonts::FontsStore;
 use crate::playback::PlaybackCommand;
-use crate::reader::{ReadingState, WPM_MIN, WPM_MAX, WPM_STEP};
+use crate::reader::{ContentNavigate, ReadingState, FONT_SIZE_MIN, FONT_SIZE_MAX, WPM_MIN, WPM_MAX, WPM_STEP};
 use crate::tabs::{ActiveTab, Content, ReaderTab, TabFontSettings, TabWpm};
 
 pub fn controls_system(
@@ -32,16 +32,26 @@ pub fn controls_system(
                 (ReadingState::Idle, true) => ("↺ Restart", PlaybackCommand::Restart),
                 _ => ("▶ Play", PlaybackCommand::TogglePlayPause),
             };
-            if ui.button(btn_text).clicked() {
+            let btn = egui::Button::new(btn_text);
+            // Size the button manually to ensure constant width over the text(otherwise it jumps when seeking the content)
+            if ui.add_sized(egui::vec2(80.0, ui.spacing().interact_size.y), btn).clicked() {
                 commands.trigger(btn_cmd);
             }
             
-            // Progress
+            // Seekable progress
             let (current, total) = content.progress();
-            ui.label(format!("{}/{}", current, total));
-            
-            let progress = if total > 0 { current as f32 / total as f32 } else { 0.0 };
-            ui.add(egui::ProgressBar::new(progress).desired_width(200.0));
+            let mut seek_index = current;
+            // ilog10() + 1 = digit count of total; pad current to match so label width stays constant
+            let width = total.max(1).ilog10() as usize + 1;
+            ui.label(egui::RichText::new(format!("{:>width$}/{}", current + 1, total)).monospace());
+            let max_index = total.saturating_sub(1);
+            if max_index > 0 {
+                let slider = egui::Slider::new(&mut seek_index, 0..=max_index)
+                    .show_value(false);
+                if ui.add_sized(egui::vec2(200.0, ui.spacing().interact_size.y), slider).changed() {
+                    commands.trigger(ContentNavigate::Seek(seek_index));
+                }
+            }
             
             ui.separator();
             
@@ -65,6 +75,16 @@ pub fn controls_system(
                         }
                     }
                 });
+            
+            // Font size (per-tab)
+            let mut font_size = font_settings.font_size;
+            let drag = egui::DragValue::new(&mut font_size)
+                .range(FONT_SIZE_MIN..=FONT_SIZE_MAX)
+                .speed(0.5)
+                .suffix(" px");
+            if ui.add(drag).changed() {
+                commands.entity(entity).insert(TabFontSettings::from_font(&font_settings.font, font_size));
+            }
             
             ui.separator();
             

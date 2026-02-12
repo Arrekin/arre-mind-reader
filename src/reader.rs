@@ -3,7 +3,7 @@
 use std::time::Duration;
 use bevy::prelude::*;
 
-use crate::tabs::{ActiveTab, Content, ReaderTab, TabWpm};
+use crate::tabs::{ActiveTab, Content, TabWpm};
 
 pub const WPM_DEFAULT: u32 = 300;
 pub const WPM_MIN: u32 = 100;
@@ -11,7 +11,7 @@ pub const WPM_MAX: u32 = 1000;
 pub const WPM_STEP: u32 = 50;
 pub const FONT_SIZE_DEFAULT: f32 = 48.0;
 pub const FONT_SIZE_MIN: f32 = 16.0;
-pub const FONT_SIZE_MAX: f32 = 96.0;
+pub const FONT_SIZE_MAX: f32 = 128.0;
 
 pub struct ReaderPlugin;
 impl Plugin for ReaderPlugin {
@@ -20,7 +20,7 @@ impl Plugin for ReaderPlugin {
             .init_resource::<ReadingTimer>()
             .add_systems(Update, ReadingTimer::tick.run_if(in_state(ReadingState::Playing)))
             .add_systems(OnEnter(ReadingState::Playing), ReadingState::on_start_playing)
-            .add_observer(WordChanged::on_trigger)
+            .add_observer(ReadingTimer::reset_on_word_changed)
             ;
     }
 }
@@ -49,34 +49,17 @@ pub struct ReadingTimer {
     pub timer: Timer,
 }
 impl ReadingTimer {
-    /// Advances words when the per-word timer expires, then signals `WordChanged`
-    /// so the timer is reset for the next word by the observer.
     fn tick(
         mut commands: Commands,
         time: Res<Time>,
         mut timer: ResMut<ReadingTimer>,
-        mut next_state: ResMut<NextState<ReadingState>>,
-        active_tab: Single<&mut Content, (With<ActiveTab>, With<ReaderTab>)>,
     ) {
         timer.timer.tick(time.delta());
-        
         if timer.timer.just_finished() {
-            let mut content = active_tab.into_inner();
-            if content.advance() {
-                commands.trigger(WordChanged);
-            } else {
-                next_state.set(ReadingState::Idle);
-            }
+            commands.trigger(ContentNavigate::Advance);
         }
     }
-}
-
-/// Fired whenever the current word changes (advance, skip, restart, tab switch).
-/// The observer resets ReadingTimer to the new word's display duration.
-#[derive(Event)]
-pub struct WordChanged;
-impl WordChanged {
-    fn on_trigger(
+    fn reset_on_word_changed(
         _trigger: On<WordChanged>,
         mut timer: ResMut<ReadingTimer>,
         active_tab: Single<(&TabWpm, &Content), With<ActiveTab>>,
@@ -88,3 +71,15 @@ impl WordChanged {
         }
     }
 }
+
+/// Content position changes from timer advance or user seek.
+/// Observer handles the actual Content mutation and emits WordChanged.
+#[derive(Event)]
+pub enum ContentNavigate {
+    Advance,
+    Seek(usize),
+}
+
+/// Fired whenever the current word changes (advance, skip, restart, tab switch).
+#[derive(Event)]
+pub struct WordChanged;
