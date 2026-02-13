@@ -11,19 +11,104 @@ use crate::playback::PlaybackCommand;
 use crate::reader::{ContentNavigate, ReadingState, FONT_SIZE_MIN, FONT_SIZE_MAX, WPM_MIN, WPM_MAX, WPM_STEP};
 use crate::tabs::{ActiveTab, Content, ReaderTab, TabFontSettings, TabWpm};
 
+const MARQUEE_SPEED: f32 = 50.0;
+
+const MARQUEE_TEXTS: &[&str] = &[
+    "Fun fact: you just read this one word at a time",
+    "Pro tip: blinking is optional but recommended",
+    "No books were harmed in the making of this reader",
+    "Have you tried turning the page off and on again?",
+    "In a world full of audiobooks, be a speed reader",
+    "If a tree falls in a forest and no one reads about it, did it happen?",
+    "According to my calculations... you should be reading something right now",
+    "I used to be a scrollbar, then I took an arrow to the knee",
+    "Warning: prolonged exposure to this app may cause involuntary speed reading",
+    "To read, or not to read -- that is never the question",
+    "One does not simply read at 100 WPM",
+    "It's not a bug, it's a reading feature",
+    "Keep calm and adjust your WPM",
+    "To infinity and beyond -- one word at a time",
+    "Resistance to reading is futile",
+    "In case of emergency, increase WPM",
+    "Not all those who wander are lost. Some are just scrolling.",
+    "The real book was inside you all along",
+    "Sponsored by absolutely nobody",
+    "Side effects may include: knowledge, vocabulary expansion, and sudden opinions about fonts",
+    "You are now breathing manually. Also reading manually.",
+    "Reading is just staring at a dead tree and hallucinating -- now digitally!",
+    "Today's forecast: 100% chance of words",
+    "Your brain is downloading content at variable bitrate",
+    "Technically, reading this counts as reading",
+    "Every word you read here is a word you didn't read in a book. Think about that.",
+    "Remember: speed is nothing without comprehension. But speed is fun.",
+    "Welcome to the bottom of the screen. Population: this text.",
+    "You've been watching this for a while. Go read something.",
+    "The letters are just vibing right now. Let them.",
+    "Day 47: the user still hasn't noticed I'm sentient",
+    "The mitochondria is the powerhouse of the cell. You're welcome.",
+    "Fun fact: octopuses have three hearts but zero reading apps",
+    "Aliens probably have faster reading apps. Probably.",
+    "Who reads the reader? You do. Right now. Meta.",
+    "Life moves pretty fast. If you don't stop and read, you might miss it.",
+    "Somewhere between opening this app and now, time became optional",
+];
+
+fn marquee_pick(cycle: u64) -> usize {
+    let mut h = cycle;
+    h ^= h >> 16;
+    h = h.wrapping_mul(0x45d9f3b);
+    h ^= h >> 16;
+    h = h.wrapping_mul(0x45d9f3b);
+    h ^= h >> 16;
+    (h as usize) % MARQUEE_TEXTS.len()
+}
+
 pub fn controls_system(
     mut commands: Commands,
+    time: Res<Time>,
     mut contexts: EguiContexts,
     current_state: Res<State<ReadingState>>,
     fonts: Res<FontsStore>,
     active_reader: Query<(Entity, &TabWpm, &TabFontSettings, &Content), (With<ActiveTab>, With<ReaderTab>)>,
+    mut marquee_seed: Local<u64>,
 ) {
     let Ok(ctx) = contexts.ctx_mut() else { return };
     
     egui::TopBottomPanel::bottom("controls").show(ctx, |ui| {
         ui.horizontal(|ui| {
             let Ok((entity, tab_wpm, font_settings, content)) = active_reader.single() else {
-                ui.label(""); // Keeps the height of the panel constant
+                // We are on the homepage - show scrolling marquee
+                let rect = ui.available_rect_before_wrap();
+                ui.allocate_rect(rect, egui::Sense::hover());
+
+                let elapsed = time.elapsed().as_secs_f32();
+                let avg_char_width = 8.5;
+                let max_text_width = MARQUEE_TEXTS.iter().map(|t| t.len()).max().unwrap_or(1) as f32 * avg_char_width;
+                let panel_width = rect.width();
+                let total_travel = panel_width + max_text_width;
+                let cycle_duration = total_travel / MARQUEE_SPEED;
+
+                if *marquee_seed == 0 {
+                    *marquee_seed = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_millis() as u64)
+                        .unwrap_or(42) + 1;
+                }
+                let cycle = (elapsed / cycle_duration) as u64 + *marquee_seed;
+                let cycle_t = (elapsed % cycle_duration) / cycle_duration;
+
+                let text = MARQUEE_TEXTS[marquee_pick(cycle)];
+                let x = rect.right() - cycle_t * total_travel;
+                let y = rect.center().y;
+
+                ui.painter_at(rect).text(
+                    egui::pos2(x, y),
+                    egui::Align2::LEFT_CENTER,
+                    text,
+                    egui::FontId::monospace(14.0),
+                    ui.visuals().text_color().linear_multiply(0.4),
+                );
+                ctx.request_repaint();
                 return;
             };
             let at_end = content.has_words() && content.is_at_end();
