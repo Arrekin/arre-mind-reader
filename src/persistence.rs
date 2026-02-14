@@ -10,6 +10,7 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::fonts::FontsStore;
+use crate::reader::{FONT_SIZE_DEFAULT, FONT_SIZE_MAX, FONT_SIZE_MIN, WPM_DEFAULT, WPM_MAX, WPM_MIN};
 use crate::tabs::{
     ActiveTab, Content, DefaultTabSettings, ReaderTab, TabCreateRequest, TabFilePath,
     TabFontSettings, TabMarker, TabWpm,
@@ -35,7 +36,7 @@ const SAVE_INTERVAL_SECS: f32 = 5.0;
 
 /// Serialization-only mirror of a reader tab's ECS components.
 /// Font is stored as a name string (resolved back to `FontData` on load).
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Serialize, Deserialize)]
 #[serde(default)]
 struct SavedTab {
     name: String,
@@ -46,6 +47,20 @@ struct SavedTab {
     content_cache_id: String,
     current_index: usize,
     is_active: bool,
+}
+impl Default for SavedTab {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            file_path: None,
+            font_name: String::new(),
+            font_size: FONT_SIZE_DEFAULT,
+            wpm: WPM_DEFAULT,
+            content_cache_id: String::new(),
+            current_index: 0,
+            is_active: false,
+        }
+    }
 }
 
 /// Root serialization structure written to `tabs.ron`.
@@ -284,11 +299,18 @@ fn spawn_tabs_from_program_state(
             warn!("Cache miss for tab '{}' ({}), skipping", tab.name, tab.content_cache_id);
             continue;
         };
+        if words.is_empty() {
+            warn!("Empty cache for tab '{}' ({}), skipping", tab.name, tab.content_cache_id);
+            continue;
+        }
 
-        let content = Content::new_from_loaded(tab.content_cache_id, words, tab.current_index);
+        let current_index = tab.current_index.min(words.len().saturating_sub(1));
+        let wpm = tab.wpm.clamp(WPM_MIN, WPM_MAX);
+        let font_size = tab.font_size.clamp(FONT_SIZE_MIN, FONT_SIZE_MAX);
+        let content = Content::new_from_loaded(tab.content_cache_id, words, current_index);
         let mut request = TabCreateRequest::new(tab.name, content)
-            .with_font(tab.font_name, tab.font_size)
-            .with_wpm(tab.wpm)
+            .with_font(tab.font_name, font_size)
+            .with_wpm(wpm)
             .with_active(tab.is_active);
 
         if let Some(path) = tab.file_path {
@@ -346,7 +368,6 @@ fn persist_program_state(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::reader::{FONT_SIZE_DEFAULT, WPM_DEFAULT};
 
     #[test]
     fn program_state_deserializes_with_missing_tab_fields() {
@@ -366,8 +387,8 @@ mod tests {
         assert_eq!(tab.name, "Recovered");
         assert_eq!(tab.content_cache_id, "cache-1");
         assert_eq!(tab.current_index, 0);
-        assert_eq!(tab.wpm, 0);
-        assert_eq!(tab.font_size, 0.0);
+        assert_eq!(tab.wpm, WPM_DEFAULT);
+        assert_eq!(tab.font_size, FONT_SIZE_DEFAULT);
         assert!(!tab.is_active);
         assert_eq!(tab.file_path, None);
 
