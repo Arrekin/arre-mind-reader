@@ -19,6 +19,7 @@ impl Plugin for UiPlugin {
         app
             .init_resource::<NewTabDialog>()
             .init_resource::<PendingFileLoad>()
+            .init_resource::<controls::MarqueeSeed>()
             .add_systems(Startup, homepage::HomepageTile::spawn)
             .add_systems(Update, dialogs::PendingFileLoad::poll)
             .add_systems(EguiPrimaryContextPass, (

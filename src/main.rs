@@ -27,7 +27,7 @@ fn main() {
                 }),
                 ..default()
             })
-            // Disable asset meta files as WASM version requests them and fails when they are not found.
+            // Disable asset meta files, as WASM version requests them, and fails when they are not found.
             .set(AssetPlugin {
                 meta_check: bevy::asset::AssetMetaCheck::Never,
                 ..default()

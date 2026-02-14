@@ -338,5 +338,5 @@ fn persist_program_state(
         tabs: saved_tabs,
         defaults: defaults.clone(),
     }.save();
-    info!("The program state was saved");
+    debug!("The program state was saved");
 }

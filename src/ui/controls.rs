@@ -53,6 +53,32 @@ const MARQUEE_TEXTS: &[&str] = &[
     "<')))><     <')))><                 <')))><",
 ];
 
+#[derive(Resource)]
+pub struct MarqueeSeed(pub u64);
+impl MarqueeSeed {
+    #[cfg(not(target_arch = "wasm32"))]
+    fn startup_seed() -> u64 {
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(42)
+            .saturating_add(1)
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn startup_seed() -> u64 {
+        (js_sys::Date::now() as u64).saturating_add(1)
+    }
+}
+impl Default for MarqueeSeed {
+    fn default() -> Self {
+        Self(Self::startup_seed())
+    }
+}
+
+
 fn marquee_pick(cycle: u64) -> usize {
     let mut h = cycle;
     h ^= h >> 16;
@@ -69,8 +95,8 @@ pub fn controls_system(
     mut contexts: EguiContexts,
     current_state: Res<State<ReadingState>>,
     fonts: Res<FontsStore>,
+    marquee_seed: Res<MarqueeSeed>,
     active_reader: Query<(Entity, &TabWpm, &TabFontSettings, &Content), (With<ActiveTab>, With<ReaderTab>)>,
-    mut marquee_seed: Local<u64>,
 ) {
     let Ok(ctx) = contexts.ctx_mut() else { return };
     
@@ -88,13 +114,7 @@ pub fn controls_system(
                 let total_travel = panel_width + max_text_width;
                 let cycle_duration = total_travel / MARQUEE_SPEED;
 
-                if *marquee_seed == 0 {
-                    *marquee_seed = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .map(|d| d.as_millis() as u64)
-                        .unwrap_or(42) + 1;
-                }
-                let cycle = (elapsed / cycle_duration) as u64 + *marquee_seed;
+                let cycle = (elapsed / cycle_duration) as u64 + marquee_seed.0;
                 let cycle_t = (elapsed % cycle_duration) / cycle_duration;
 
                 let text = MARQUEE_TEXTS[marquee_pick(cycle)];
