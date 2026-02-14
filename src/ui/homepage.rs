@@ -47,7 +47,7 @@ pub struct TileVisuals {
     pub color: egui::Color32,
 }
 
-#[derive(Component)]
+#[derive(Component, Default)]
 pub struct HomepageTile;
 impl HomepageTile {
     /// Run condition: returns true when the homepage tab is active.
@@ -61,28 +61,33 @@ impl HomepageTile {
         // TilePosition is center-relative tile-center offset.
         // These values match the current visual layout while keeping the tile group
         // centered automatically when the window is resized.
-        commands.spawn((HomepageTile, AboutTile,
+        commands.spawn((
+            AboutTile,
             TilePosition(Vec2::new(0.0, -94.0)),
             TileSize(Vec2::new(380.0, 380.0)),
             TileVisuals { title: "About", color: COLOR_ABOUT },
         ));
-        commands.spawn((HomepageTile, FontSettingsTile,
+        commands.spawn((
+            FontSettingsTile,
             TilePosition(Vec2::new(400.0, -94.0)),
-            TileSize(Vec2::new(260.0, 320.0)),
+            TileSize(Vec2::new(260.0, 220.0)),
             TileVisuals { title: "Default Tab Settings", color: COLOR_FONT },
         ));
-        commands.spawn((HomepageTile, ShortcutsTile,
-            TilePosition(Vec2::new(-154.0, 164.0)),
-            TileSize(Vec2::new(260.0, 180.0)),
+        commands.spawn((
+            ShortcutsTile,
+            TilePosition(Vec2::new(-400.0, -200.0)),
+            TileSize(Vec2::new(200.0, 120.0)),
             TileVisuals { title: "Keyboard Shortcuts", color: COLOR_SHORTCUTS },
         ));
-        // commands.spawn((HomepageTile, StatsTile,
+        // commands.spawn((
+        //     StatsTile,
         //     TilePosition(Vec2::new(0.0, 164.0)),
         //     TileSize(Vec2::new(220.0, 180.0)),
         //     TileVisuals { title: "Reading Stats", color: COLOR_STATS },
         // ));
-        commands.spawn((HomepageTile, TipsTile,
-            TilePosition(Vec2::new(134.0, 164.0)),
+        commands.spawn((
+            TipsTile,
+            TilePosition(Vec2::new(-400.0, 0.)),
             TileSize(Vec2::new(300.0, 180.0)),
             TileVisuals { title: "Tips", color: COLOR_TIPS },
         ));
@@ -101,6 +106,7 @@ impl HomepageTile {
 // ── Per-tile types ──────────────────────────────────────────────────────────
 
 #[derive(Component)]
+#[require(HomepageTile)]
 pub struct AboutTile;
 impl AboutTile {
     pub fn update(
@@ -172,6 +178,7 @@ impl AboutTile {
 }
 
 #[derive(Component)]
+#[require(HomepageTile)]
 pub struct FontSettingsTile;
 impl FontSettingsTile {
     pub fn update(
@@ -225,6 +232,7 @@ impl FontSettingsTile {
 }
 
 #[derive(Component)]
+#[require(HomepageTile)]
 pub struct ShortcutsTile;
 impl ShortcutsTile {
     pub fn update(
@@ -233,11 +241,11 @@ impl ShortcutsTile {
     ) {
         let Ok(ctx) = contexts.ctx_mut() else { return };
         let (position, size, visuals) = tile.into_inner();
+        let wpm_adjust_description = format!("Adjust WPM ±{}", WPM_STEP);
         tile_frame(ctx, "shortcuts", position, size, visuals, |ui| {
             Self::shortcut_row(ui, "Space", "Play / Pause");
-            Self::shortcut_row(ui, "Escape", "Stop");
             Self::shortcut_row(ui, "← / →", "Skip 5 words");
-            Self::shortcut_row(ui, "↑ / ↓", "Adjust WPM ±50");
+            Self::shortcut_row(ui, "↑ / ↓", &wpm_adjust_description);
             Self::shortcut_row(ui, "R", "Restart");
         });
     }
@@ -252,6 +260,7 @@ impl ShortcutsTile {
 }
 
 #[derive(Component)]
+#[require(HomepageTile)]
 #[allow(dead_code)]
 pub struct StatsTile;
 #[allow(dead_code)]
@@ -283,6 +292,7 @@ impl StatsTile {
 }
 
 #[derive(Component)]
+#[require(HomepageTile)]
 pub struct TipsTile;
 impl TipsTile {
     pub fn update(
@@ -292,11 +302,17 @@ impl TipsTile {
         let Ok(ctx) = contexts.ctx_mut() else { return };
         let (position, size, visuals) = tile.into_inner();
         tile_frame(ctx, "tips", position, size, visuals, |ui| {
-            ui.label("💡 Start with a lower WPM and gradually increase as you get comfortable.");
+            ui.label("💡 Start around 250-350 WPM. Increase only when comprehension stays easy.");
             ui.add_space(8.0);
-            ui.label("💡 Monospace fonts work best — the fixation point stays aligned.");
+            ui.label("💡 If focus slips, drop WPM by 50 and continue.");
             ui.add_space(8.0);
-            ui.label("💡 Take breaks every 15–20 minutes for better retention.");
+            ui.label("💡 Take short breaks every 15-20 minutes to reduce eye strain.");
+            ui.add_space(8.0);
+            ui.horizontal_wrapped(|ui| {
+                ui.label("💡 Lost thread? Use");
+                ui.label(egui::RichText::new("←/→").monospace());
+                ui.label("to recover context.");
+            });
         });
     }
 }

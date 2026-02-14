@@ -50,7 +50,6 @@ const MARQUEE_TEXTS: &[&str] = &[
     "Aliens probably have faster reading apps. Probably.",
     "Who reads the reader? You do. Right now. Meta.",
     "Life moves pretty fast. If you don't stop and read, you might miss it.",
-    "Somewhere between opening this app and now, time became optional",
     "<')))><     <')))><                 <')))><",
 ];
 
