@@ -5,7 +5,7 @@
 use bevy::prelude::*;
 
 use crate::tabs::{ActiveTab, Content, TabWpm};
-use crate::reader::{ReadingState, WordChanged};
+use crate::reader::ReadingState;
 
 pub struct PlaybackPlugin;
 impl Plugin for PlaybackPlugin {
@@ -16,38 +16,25 @@ impl Plugin for PlaybackPlugin {
     }
 }
 
-const WORD_SKIP_AMOUNT: usize = 5;
-
 // ============================================================================
 // Playback Commands
 // ============================================================================
 
 /// All playback actions, dispatched from keyboard input and UI controls.
-/// Processed by a single observer that routes to state transitions and content mutations.
+/// Processed by a single observer that routes to playback state and WPM updates.
 #[derive(Event)]
 pub enum PlaybackCommand {
     TogglePlayPause,
-    Restart,
-    SkipForward(usize),
-    SkipBackward(usize),
     AdjustWpm(i32),
 }
 impl PlaybackCommand {
-    pub fn skip_forward() -> Self {
-        Self::SkipForward(WORD_SKIP_AMOUNT)
-    }
-
-    pub fn skip_backward() -> Self {
-        Self::SkipBackward(WORD_SKIP_AMOUNT)
-    }
     /// Central command handler. Uses `Query` (not `Single`) for `active_tabs` because
     /// some commands (e.g. `Stop`) are valid even without an active reader tab.
     fn on_trigger(
         trigger: On<PlaybackCommand>,
-        mut commands: Commands,
         current_state: Res<State<ReadingState>>,
         mut next_state: ResMut<NextState<ReadingState>>,
-        mut active_tabs: Query<(&mut TabWpm, &mut Content), With<ActiveTab>>,
+        mut active_tabs: Query<(&mut TabWpm, &Content), With<ActiveTab>>,
     ) {
         match trigger.event() {
             PlaybackCommand::TogglePlayPause => {
@@ -60,24 +47,6 @@ impl PlaybackCommand {
                             next_state.set(ReadingState::Playing);
                         }
                     }
-                }
-            }
-            PlaybackCommand::Restart => {
-                if let Ok((_, mut content)) = active_tabs.single_mut() {
-                    content.restart();
-                    commands.trigger(WordChanged);
-                }
-            }
-            PlaybackCommand::SkipForward(amount) => {
-                if let Ok((_, mut content)) = active_tabs.single_mut() {
-                    content.skip_forward(*amount);
-                    commands.trigger(WordChanged);
-                }
-            }
-            PlaybackCommand::SkipBackward(amount) => {
-                if let Ok((_, mut content)) = active_tabs.single_mut() {
-                    content.skip_backward(*amount);
-                    commands.trigger(WordChanged);
                 }
             }
             PlaybackCommand::AdjustWpm(delta) => {
@@ -163,20 +132,4 @@ mod tests {
         assert_eq!(tab_wpm.0, WPM_MIN);
     }
 
-    #[test]
-    fn restart_resets_current_index() {
-        let mut app = make_test_app();
-        let active_tab_entity = spawn_active_tab(
-            &mut app,
-            vec![Word::new("one"), Word::new("two"), Word::new("three")],
-            2,
-            300,
-        );
-
-        app.world_mut().trigger(PlaybackCommand::Restart);
-
-        let content = app.world().entity(active_tab_entity).get::<Content>()
-            .expect("Active tab should have Content component");
-        assert_eq!(content.current_index, 0);
-    }
 }

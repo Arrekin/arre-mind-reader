@@ -156,17 +156,13 @@ impl Content {
         (self.current_index, self.words.len())
     }
     pub fn skip_forward(&mut self, amount: usize) {
-        self.current_index = (self.current_index + amount)
-            .min(self.words.len().saturating_sub(1));
+        self.seek(self.current_index.saturating_add(amount));
     }
     pub fn skip_backward(&mut self, amount: usize) {
-        self.current_index = self.current_index.saturating_sub(amount);
+        self.seek(self.current_index.saturating_sub(amount));
     }
     pub fn seek(&mut self, index: usize) {
         self.current_index = index.min(self.words.len().saturating_sub(1));
-    }
-    pub fn restart(&mut self) {
-        self.current_index = 0;
     }
     pub fn is_at_end(&self) -> bool {
         self.current_index + 1 >= self.words.len()
@@ -189,17 +185,21 @@ impl Content {
         let mut content = active_tab.into_inner();
         match trigger.event() {
             ContentNavigate::Advance => {
-                if content.advance() {
-                    commands.trigger(WordChanged);
-                } else {
+                if !content.advance() {
                     next_state.set(ReadingState::Idle);
                 }
             }
             ContentNavigate::Seek(index) => {
                 content.seek(*index);
-                commands.trigger(WordChanged);
+            }
+            ContentNavigate::SkipForward(amount) => {
+                content.skip_forward(*amount);
+            }
+            ContentNavigate::SkipBackward(amount) => {
+                content.skip_backward(*amount);
             }
         }
+        commands.trigger(WordChanged);
     }
 }
 
@@ -398,7 +398,7 @@ mod tests {
     }
 
     #[test]
-    fn content_advance_and_restart_follow_contract() {
+    fn content_advance_and_seek_follow_contract() {
         let mut content = make_content(2, 0);
 
         assert!(content.advance());
@@ -408,7 +408,7 @@ mod tests {
         assert!(!content.advance());
         assert_eq!(content.current_index, 1);
 
-        content.restart();
+        content.seek(0);
         assert_eq!(content.current_index, 0);
         assert!(!content.is_at_end());
     }

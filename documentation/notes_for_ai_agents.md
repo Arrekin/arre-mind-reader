@@ -12,18 +12,16 @@ Arre Mind Reader is a speed-reading application built with Bevy and Rust. It imp
 ## Design Decisions
 - **ORP (Optical Recognition Point):** The letter the eye fixates on, positioned at screen center (0,0). Research shows slightly left-of-center is optimal.
 - **Monospace fonts only.** The ORP positioning uses a fixed `CHAR_WIDTH_RATIO` (0.6) to estimate character width. Proportional fonts will misalign. This is intentional — RSVP works best with monospace.
-- **Tab types.** `HomepageTab` and `ReaderTab` marker components distinguish tab kinds at the query level. Homepage is a special non-closeable tab spawned on startup — no `Content`, `TabFontSettings`, or `TabWpm`. Systems use query filters (e.g. `With<ReaderTab>`) instead of runtime type checks. ORP/reticle entities carry a `ReaderDisplay` marker; two `On<Insert, ActiveTab>` observers in `orp.rs` handle tab activation: `on_reader_tab_activated` (uses `Single<..., With<ReaderTab>>`) shows the display and re-inserts font settings, while `on_homepage_tab_activated` (uses `Single<..., With<HomepageTab>>`) hides it. Bevy auto-skips the non-matching observer via `Single`.
-- **Per-tab settings.** Font and WPM are stored per-tab, not globally. ORP highlight color is hardcoded red.
+- **Tab types.** `HomepageTab` and `ReaderTab` marker components distinguish tab kinds at the query level. Homepage is a special non-closeable tab spawned on startup — no `Content`, `TabFontSettings`, or `TabWpm`. Systems use query filters (e.g. `With<ReaderTab>`). ORP/reticle entities carry a `ReaderDisplay` marker;
+- **Per-tab settings.** Font and WPM are stored per-tab, not globally.
 - **WordChanged event.** A `WordChanged` trigger (in `reader.rs`) is fired whenever the current word changes — by tick advance, skip, restart, or tab switch. Observers reset `ReadingTimer` and update ORP text content. All code that changes the current word must trigger `WordChanged`.
 - **Font changes via component insertion.** Font is changed by inserting `TabFontSettings` on the tab entity (no separate event). `On<Insert, TabFontSettings>` in `orp.rs` updates ORP display for the active tab. `On<Insert, ActiveTab>` also reads font settings to update ORP on tab switch.
 - **Centralized tab creation.** All tab creation goes through `TabCreateRequest` (with builder pattern). Both persistence restore and UI dialogs trigger this event — never spawn tab entities manually.
-- **Encapsulation.** `Content` and `TabOrder` expose methods for their operations. Use the API (e.g. `advance()`, `current_word()`, `find_adjacent()`) instead of accessing their fields directly.
-- **Paragraph detection.** Blank lines in source text mark the *last word before the gap* as `is_paragraph_end`, not the first word after. This ensures the reading pause happens at the end of the paragraph.
 - **Display duration uses max-wins multiplier** (not cumulative). A sentence-ending long word gets the sentence-end pause (×3.0), not sentence-end × long-word.
-- **Restart doesn't auto-play.** Pressing R resets `current_index` to 0 but doesn't change `ReadingState`. User must press Play separately.
+- **Restart doesn't change ReadingState.** Pressing R resets `current_index` to 0 but doesn't change `ReadingState`. User must press Play/Pause separately.
 
 ## Module Structure
-Each file follows: imports → Plugin definition → constants → types/components → systems
+Each file follows: imports → Plugin definition → constants → types/components → systems → tests
 
 - `main.rs` - App entry, plugin registration, camera spawn
 - `reader.rs` - `ReadingState` (Idle/Playing/Paused), `ReadingTimer`, `WordChanged` event+observer
@@ -35,7 +33,7 @@ Each file follows: imports → Plugin definition → constants → types/compone
 - `fonts.rs` - `FontsStore` resource, built-in + discovered fonts
 - `persistence.rs` - Periodic save of tab metadata to `tabs.ron`, per-tab word cache, orphan cleanup
 - `ui/` - egui UI: `tab_bar.rs`, `controls.rs`, `dialogs.rs`, `homepage.rs`
-  - `homepage.rs` — Tile entities (ECS-native): each tile is a Bevy entity with `TilePosition`, `TileSize`, `TileVisuals` + a marker component. Each tile type has its own system querying only what it needs. `tile_frame()` helper renders shared chrome (background, title, separator) via `egui::Area`. Systems gated by `homepage_active` run condition.
+  - `homepage.rs` — Tile entities (ECS-native): each tile is a Bevy entity with `TilePosition`, `TileSize`, `TileVisuals` + a marker component. Each tile type has its own system querying only what it needs.
 
 ## ECS Event Patterns
 - **Tab lifecycle:** `EntityEvent` structs (`TabSelect`, `TabClose`) with observers. `TabOrder` auto-updates via `Add`/`Remove` observers on `TabMarker`.
@@ -46,11 +44,8 @@ Each file follows: imports → Plugin definition → constants → types/compone
 
 ## Bevy 0.18 Patterns
 These differ from older Bevy versions — do not rely on pre-0.16 knowledge:
-- `Camera2d` is a component, not a bundle
 - `Text2d::new()` + `TextFont` + `TextColor` + `Anchor` for 2D text
-- `Sprite::from_color()` for simple rectangles
 - `children![]` macro for entity hierarchies
-- `EguiPlugin::default()` (has struct fields now)
 - `EventReader`/`EventWriter` renamed to `MessageReader`/`MessageWriter`. The `Event` trait + `commands.trigger()` is now for immediate observer-based dispatch.
 - `Single<>` query type — system is skipped entirely when not exactly one match. Good for systems that should only run when a specific entity exists. For 0 or 1, use `Option<Single<>>`.
 
@@ -64,7 +59,6 @@ The app supports **native** and **WASM**. See `documentation/wasm_build.md` for 
 ## Code Style
 - Query variables use plural form (e.g., `tabs`, `segments`), not `_q` suffix(singular when using Single<>)
 - Encapsulate component internals behind methods. Use the API, don't reach into fields.
-- Each module with a plugin defines it near the top after imports
 - Don't put newlines between struct and its impl blocks
 - **Use `pub`, not `pub(crate)`.** Single-crate project — `pub(crate)` adds noise with no benefit.
 - **Comments must be timeless.** Never leave comments that reference the current conversation, refactoring session, or rationale like "we moved this here because X was duplicated." Comments should make sense to a reader who has no context of how the code evolved. If the code is self-explanatory, no comment is needed.

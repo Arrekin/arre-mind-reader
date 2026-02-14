@@ -1,7 +1,7 @@
 //! Playback controls UI component.
 //!
 //! Renders play/pause, progress, WPM slider, and font selector.
-//! Emits PlaybackCommand events for state changes.
+//! Emits PlaybackCommand and ContentNavigate events.
 
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
@@ -132,15 +132,19 @@ pub fn controls_system(
                 return;
             };
             let at_end = content.has_words() && content.is_at_end();
-            let (btn_text, btn_cmd) = match (current_state.get(), at_end) {
-                (_, true) => ("↺ Restart", PlaybackCommand::Restart),
-                (ReadingState::Playing, _) => ("⏸ Pause", PlaybackCommand::TogglePlayPause),
-                _ => ("▶ Play", PlaybackCommand::TogglePlayPause),
+            let btn_text = match (current_state.get(), at_end) {
+                (_, true) => "↺ Restart",
+                (ReadingState::Playing, _) => "⏸ Pause",
+                _ => "▶ Play",
             };
             let btn = egui::Button::new(btn_text);
             // Size the button manually to ensure constant width over the text(otherwise it jumps when seeking the content)
             if ui.add_sized(egui::vec2(80.0, ui.spacing().interact_size.y), btn).clicked() {
-                commands.trigger(btn_cmd);
+                if at_end {
+                    commands.trigger(ContentNavigate::Seek(0));
+                } else {
+                    commands.trigger(PlaybackCommand::TogglePlayPause);
+                }
             }
             
             // Seekable progress

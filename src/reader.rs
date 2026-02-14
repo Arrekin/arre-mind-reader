@@ -78,8 +78,10 @@ impl ReadingTimer {
 pub enum ContentNavigate {
     Advance,
     Seek(usize),
+    SkipForward(usize),
+    SkipBackward(usize),
 }
 
-/// Fired whenever the current word changes (advance, skip, restart, tab switch).
+/// Fired after content navigation and tab switch to refresh timer and ORP display.
 #[derive(Event)]
 pub struct WordChanged;

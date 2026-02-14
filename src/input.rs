@@ -6,7 +6,9 @@ use bevy::prelude::*;
 use bevy_egui::EguiContexts;
 
 use crate::playback::PlaybackCommand;
-use crate::reader::WPM_STEP;
+use crate::reader::{ContentNavigate, WPM_STEP};
+
+const WORD_SKIP_AMOUNT: usize = 5;
 
 pub struct InputPlugin;
 impl Plugin for InputPlugin {
@@ -35,15 +37,15 @@ fn handle_input(
     
     // R: restart
     if keyboard.just_pressed(KeyCode::KeyR) {
-        commands.trigger(PlaybackCommand::Restart);
+        commands.trigger(ContentNavigate::Seek(0));
     }
     
     // Arrow keys: navigation and WPM
     if keyboard.just_pressed(KeyCode::ArrowLeft) {
-        commands.trigger(PlaybackCommand::skip_backward());
+        commands.trigger(ContentNavigate::SkipBackward(WORD_SKIP_AMOUNT));
     }
     if keyboard.just_pressed(KeyCode::ArrowRight) {
-        commands.trigger(PlaybackCommand::skip_forward());
+        commands.trigger(ContentNavigate::SkipForward(WORD_SKIP_AMOUNT));
     }
     if keyboard.just_pressed(KeyCode::ArrowUp) {
         commands.trigger(PlaybackCommand::AdjustWpm(WPM_STEP as i32));
