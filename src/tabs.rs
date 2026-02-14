@@ -36,6 +36,7 @@ impl Plugin for TabsPlugin {
 /// Serialized to disk as part of `ProgramState`. Stores `font_name` as a string
 /// (not `FontData`) because font handles are runtime-only.
 #[derive(Resource, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct DefaultTabSettings {
     pub font_name: String,
     pub font_size: f32,

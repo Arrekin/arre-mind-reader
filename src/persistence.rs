@@ -35,7 +35,8 @@ const SAVE_INTERVAL_SECS: f32 = 5.0;
 
 /// Serialization-only mirror of a reader tab's ECS components.
 /// Font is stored as a name string (resolved back to `FontData` on load).
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
+#[serde(default)]
 struct SavedTab {
     name: String,
     file_path: Option<String>,
@@ -50,6 +51,7 @@ struct SavedTab {
 /// Root serialization structure written to `tabs.ron`.
 /// Contains all reader tabs and the global default settings.
 #[derive(Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct ProgramState {
     tabs: Vec<SavedTab>,
     defaults: DefaultTabSettings,
