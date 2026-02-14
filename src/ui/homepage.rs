@@ -2,7 +2,7 @@
 //!
 //! Each tile is a Bevy entity with shared components (TilePosition, TileSize, TileVisuals)
 //! and a unique marker component. Each tile type has its own system that queries only
-//! what it needs. See task.md for full architecture rationale.
+//! what it needs.
 
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
@@ -16,13 +16,25 @@ const TILE_INNER_MARGIN: i8 = 12;
 const COLOR_ABOUT: egui::Color32 = egui::Color32::from_rgb(45, 55, 72);
 const COLOR_FONT: egui::Color32 = egui::Color32::from_rgb(56, 78, 56);
 const COLOR_SHORTCUTS: egui::Color32 = egui::Color32::from_rgb(78, 56, 72);
+#[allow(dead_code)]
 const COLOR_STATS: egui::Color32 = egui::Color32::from_rgb(56, 68, 82);
 const COLOR_TIPS: egui::Color32 = egui::Color32::from_rgb(72, 62, 48);
 
 // ── Shared tile components ──────────────────────────────────────────────────
 
 #[derive(Component)]
+/// Center-relative tile offset. Values are interpreted as deltas from the
+/// current egui content rect center to the tile center.
 pub struct TilePosition(pub Vec2);
+impl TilePosition {
+    fn to_absolute_top_left(&self, ctx: &egui::Context, size: &TileSize) -> egui::Pos2 {
+        let center = ctx.content_rect().center();
+        egui::pos2(
+            center.x + self.0.x - size.0.x * 0.5,
+            center.y + self.0.y - size.0.y * 0.5,
+        )
+    }
+}
 
 #[derive(Component)]
 pub struct TileSize(pub Vec2);
@@ -44,34 +56,31 @@ impl HomepageTile {
     }
 
     pub fn spawn(mut commands: Commands) {
-        // Row 1: About (360×200) + Default Tab Settings (260×320)
-        // Row 1 height = 320, About vertically centered: y_offset = (320-200)/2 = 60
-        // Row 1 total width: 360 + 8 + 260 = 628, centered in 1280: x_start = 326
+        // TilePosition is center-relative tile-center offset.
+        // These values match the current visual layout while keeping the tile group
+        // centered automatically when the window is resized.
         commands.spawn((HomepageTile, AboutTile,
-            TilePosition(Vec2::new(326.0, 166.0)),
+            TilePosition(Vec2::new(-134.0, -94.0)),
             TileSize(Vec2::new(360.0, 200.0)),
             TileVisuals { title: "About", color: COLOR_ABOUT },
         ));
         commands.spawn((HomepageTile, FontSettingsTile,
-            TilePosition(Vec2::new(694.0, 106.0)),
+            TilePosition(Vec2::new(184.0, -94.0)),
             TileSize(Vec2::new(260.0, 320.0)),
             TileVisuals { title: "Default Tab Settings", color: COLOR_FONT },
         ));
-        // Row 2: Shortcuts (260×180) + Stats (220×180) + Tips (300×180)
-        // Row 2 starts at 106 + 320 + 8 = 434
-        // Row 2 total width: 260 + 8 + 220 + 8 + 300 = 796, centered in 1280: x_start = 242
         commands.spawn((HomepageTile, ShortcutsTile,
-            TilePosition(Vec2::new(242.0, 434.0)),
+            TilePosition(Vec2::new(-154.0, 164.0)),
             TileSize(Vec2::new(260.0, 180.0)),
             TileVisuals { title: "Keyboard Shortcuts", color: COLOR_SHORTCUTS },
         ));
-        commands.spawn((HomepageTile, StatsTile,
-            TilePosition(Vec2::new(510.0, 434.0)),
-            TileSize(Vec2::new(220.0, 180.0)),
-            TileVisuals { title: "Reading Stats", color: COLOR_STATS },
-        ));
+        // commands.spawn((HomepageTile, StatsTile,
+        //     TilePosition(Vec2::new(0.0, 164.0)),
+        //     TileSize(Vec2::new(220.0, 180.0)),
+        //     TileVisuals { title: "Reading Stats", color: COLOR_STATS },
+        // ));
         commands.spawn((HomepageTile, TipsTile,
-            TilePosition(Vec2::new(738.0, 434.0)),
+            TilePosition(Vec2::new(134.0, 164.0)),
             TileSize(Vec2::new(300.0, 180.0)),
             TileVisuals { title: "Tips", color: COLOR_TIPS },
         ));
@@ -194,7 +203,9 @@ impl ShortcutsTile {
 }
 
 #[derive(Component)]
+#[allow(dead_code)]
 pub struct StatsTile;
+#[allow(dead_code)]
 impl StatsTile {
     pub fn update(
         mut contexts: EguiContexts,
@@ -254,7 +265,7 @@ fn tile_frame(
     content: impl FnOnce(&mut egui::Ui),
 ) {
     egui::Area::new(egui::Id::new(id))
-        .fixed_pos(egui::pos2(position.0.x, position.0.y))
+        .fixed_pos(position.to_absolute_top_left(ctx, size))
         .show(ctx, |ui| {
             egui::Frame::NONE
                 .fill(visuals.color)

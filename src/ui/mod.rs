@@ -29,7 +29,7 @@ impl Plugin for UiPlugin {
                     homepage::AboutTile::update,
                     homepage::FontSettingsTile::update,
                     homepage::ShortcutsTile::update,
-                    homepage::StatsTile::update,
+                    // homepage::StatsTile::update,
                     homepage::TipsTile::update,
                 ).run_if(homepage::HomepageTile::is_active),
             ).chain())
