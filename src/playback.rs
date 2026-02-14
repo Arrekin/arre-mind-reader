@@ -91,3 +91,92 @@ impl PlaybackCommand {
         }
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::reader::{ReadingState, WPM_MAX, WPM_MIN};
+    use crate::text::Word;
+
+    fn make_test_app() -> App {
+        let mut app = App::new();
+        app
+            .add_plugins(MinimalPlugins)
+            .add_plugins(bevy::state::app::StatesPlugin)
+            .init_state::<ReadingState>()
+            .add_observer(PlaybackCommand::on_trigger)
+            ;
+        app
+    }
+
+    fn spawn_active_tab(app: &mut App, words: Vec<Word>, current_index: usize, wpm: u32) -> Entity {
+        app.world_mut().spawn((
+            ActiveTab,
+            TabWpm(wpm),
+            Content {
+                content_cache_id: "test-cache".into(),
+                words,
+                current_index,
+            },
+        )).id()
+    }
+
+    #[test]
+    fn toggle_play_pause_does_not_start_when_content_is_empty() {
+        let mut app = make_test_app();
+        spawn_active_tab(&mut app, Vec::new(), 0, 300);
+
+        app.world_mut().trigger(PlaybackCommand::TogglePlayPause);
+        app.update();
+
+        assert_eq!(app.world().resource::<State<ReadingState>>().get(), &ReadingState::Idle);
+    }
+
+    #[test]
+    fn toggle_play_pause_transitions_between_playing_and_paused() {
+        let mut app = make_test_app();
+        spawn_active_tab(&mut app, vec![Word::new("hello")], 0, 300);
+
+        app.world_mut().trigger(PlaybackCommand::TogglePlayPause);
+        app.update();
+        assert_eq!(app.world().resource::<State<ReadingState>>().get(), &ReadingState::Playing);
+
+        app.world_mut().trigger(PlaybackCommand::TogglePlayPause);
+        app.update();
+        assert_eq!(app.world().resource::<State<ReadingState>>().get(), &ReadingState::Paused);
+    }
+
+    #[test]
+    fn adjust_wpm_clamps_to_limits() {
+        let mut app = make_test_app();
+        let active_tab_entity = spawn_active_tab(&mut app, vec![Word::new("hello")], 0, 300);
+
+        app.world_mut().trigger(PlaybackCommand::AdjustWpm(10_000));
+        let tab_wpm = app.world().entity(active_tab_entity).get::<TabWpm>()
+            .expect("Active tab should have TabWpm component");
+        assert_eq!(tab_wpm.0, WPM_MAX);
+
+        app.world_mut().trigger(PlaybackCommand::AdjustWpm(-10_000));
+        let tab_wpm = app.world().entity(active_tab_entity).get::<TabWpm>()
+            .expect("Active tab should have TabWpm component");
+        assert_eq!(tab_wpm.0, WPM_MIN);
+    }
+
+    #[test]
+    fn restart_resets_current_index() {
+        let mut app = make_test_app();
+        let active_tab_entity = spawn_active_tab(
+            &mut app,
+            vec![Word::new("one"), Word::new("two"), Word::new("three")],
+            2,
+            300,
+        );
+
+        app.world_mut().trigger(PlaybackCommand::Restart);
+
+        let content = app.world().entity(active_tab_entity).get::<Content>()
+            .expect("Active tab should have Content component");
+        assert_eq!(content.current_index, 0);
+    }
+}

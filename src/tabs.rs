@@ -364,3 +364,87 @@ impl ApplyDefaultsToAll {
     }
 }
 
+
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_content(word_count: usize, current_index: usize) -> Content {
+        let words = (0..word_count)
+            .map(|index| Word::new(format!("w{}", index)))
+            .collect();
+
+        Content {
+            content_cache_id: "test-cache".into(),
+            words,
+            current_index,
+        }
+    }
+
+    #[test]
+    fn content_navigation_saturates_at_bounds() {
+        let mut content = make_content(3, 1);
+
+        content.skip_forward(10);
+        assert_eq!(content.current_index, 2);
+
+        content.seek(999);
+        assert_eq!(content.current_index, 2);
+
+        content.skip_backward(10);
+        assert_eq!(content.current_index, 0);
+    }
+
+    #[test]
+    fn content_advance_and_restart_follow_contract() {
+        let mut content = make_content(2, 0);
+
+        assert!(content.advance());
+        assert_eq!(content.current_index, 1);
+        assert!(content.is_at_end());
+
+        assert!(!content.advance());
+        assert_eq!(content.current_index, 1);
+
+        content.restart();
+        assert_eq!(content.current_index, 0);
+        assert!(!content.is_at_end());
+    }
+
+    #[test]
+    fn content_empty_is_treated_as_end() {
+        let content = make_content(0, 0);
+
+        assert!(!content.has_words());
+        assert!(content.is_at_end());
+        assert!(content.current_word().is_none());
+    }
+
+    #[test]
+    fn tab_order_find_adjacent_prefers_next_then_previous() {
+        let mut world = World::new();
+        let first = world.spawn_empty().id();
+        let second = world.spawn_empty().id();
+        let third = world.spawn_empty().id();
+
+        let order = TabOrder(vec![first, second, third]);
+        assert_eq!(order.find_adjacent(second), Some(third));
+        assert_eq!(order.find_adjacent(third), Some(second));
+        assert_eq!(order.find_adjacent(first), Some(second));
+    }
+
+    #[test]
+    fn tab_order_find_adjacent_returns_none_for_missing_or_single() {
+        let mut world = World::new();
+        let only = world.spawn_empty().id();
+        let missing = world.spawn_empty().id();
+
+        let single = TabOrder(vec![only]);
+        assert_eq!(single.find_adjacent(only), None);
+
+        let multi = TabOrder(vec![only]);
+        assert_eq!(multi.find_adjacent(missing), None);
+    }
+}

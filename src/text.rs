@@ -260,3 +260,49 @@ impl TextParser for EpubParser {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn display_duration_uses_max_wins_precedence() {
+        let wpm = 600;
+
+        assert_eq!(Word::new("abcdefghijk").display_duration_ms(wpm), 130);
+        assert_eq!(Word::new("abcdefghijk,").display_duration_ms(wpm), 200);
+        assert_eq!(Word::new("abcdefghijk.").display_duration_ms(wpm), 300);
+
+        let mut paragraph_end_word = Word::new("abcdefghijk.");
+        paragraph_end_word.is_paragraph_end = true;
+        assert_eq!(paragraph_end_word.display_duration_ms(wpm), 400);
+    }
+
+    #[test]
+    fn words_from_text_marks_last_word_before_blank_line() {
+        let words = words_from_text("alpha beta\n\n gamma\n\n\n delta");
+
+        let texts: Vec<&str> = words.iter().map(|word| word.text.as_str()).collect();
+        let paragraph_end_flags: Vec<bool> = words.iter().map(|word| word.is_paragraph_end).collect();
+
+        assert_eq!(texts, vec!["alpha", "beta", "gamma", "delta"]);
+        assert_eq!(paragraph_end_flags, vec![false, true, true, false]);
+    }
+
+    #[test]
+    fn words_from_text_handles_leading_and_trailing_blank_lines() {
+        let words = words_from_text("\n\nalpha\n\n");
+
+        assert_eq!(words.len(), 1);
+        assert_eq!(words[0].text, "alpha");
+        assert!(words[0].is_paragraph_end);
+    }
+
+    #[test]
+    fn file_parsers_lookup_is_case_insensitive() {
+        let parsers = FileParsers::new();
+
+        assert!(parsers.get_for_extension("TXT").is_some());
+        assert!(parsers.get_for_path(Path::new("book.EPUB")).is_some());
+        assert!(parsers.get_for_extension("pdf").is_none());
+    }
+}

@@ -342,3 +342,53 @@ fn persist_program_state(
     }.save();
     debug!("The program state was saved");
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::reader::{FONT_SIZE_DEFAULT, WPM_DEFAULT};
+
+    #[test]
+    fn program_state_deserializes_with_missing_tab_fields() {
+        let ron = r#"(
+            tabs: [
+                (
+                    name: "Recovered",
+                    content_cache_id: "cache-1",
+                ),
+            ],
+        )"#;
+
+        let state: ProgramState = ron::from_str(ron).expect("ProgramState should deserialize with defaults");
+
+        assert_eq!(state.tabs.len(), 1);
+        let tab = &state.tabs[0];
+        assert_eq!(tab.name, "Recovered");
+        assert_eq!(tab.content_cache_id, "cache-1");
+        assert_eq!(tab.current_index, 0);
+        assert_eq!(tab.wpm, 0);
+        assert_eq!(tab.font_size, 0.0);
+        assert!(!tab.is_active);
+        assert_eq!(tab.file_path, None);
+
+        assert_eq!(state.defaults.font_name, String::new());
+        assert_eq!(state.defaults.font_size, FONT_SIZE_DEFAULT);
+        assert_eq!(state.defaults.wpm, WPM_DEFAULT);
+    }
+
+    #[test]
+    fn default_tab_settings_deserializes_with_partial_fields() {
+        let ron = r#"(
+            defaults: (
+                wpm: 420,
+            ),
+        )"#;
+
+        let state: ProgramState = ron::from_str(ron).expect("ProgramState should deserialize with nested defaults");
+
+        assert!(state.tabs.is_empty());
+        assert_eq!(state.defaults.wpm, 420);
+        assert_eq!(state.defaults.font_name, String::new());
+        assert_eq!(state.defaults.font_size, FONT_SIZE_DEFAULT);
+    }
+}
