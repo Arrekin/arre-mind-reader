@@ -19,6 +19,8 @@ const COLOR_SHORTCUTS: egui::Color32 = egui::Color32::from_rgb(78, 56, 72);
 #[allow(dead_code)]
 const COLOR_STATS: egui::Color32 = egui::Color32::from_rgb(56, 68, 82);
 const COLOR_TIPS: egui::Color32 = egui::Color32::from_rgb(72, 62, 48);
+const COLOR_TILE_TEXT: egui::Color32 = egui::Color32::from_rgb(187, 197, 214);
+const WEBSITE_PLACEHOLDER_URL: &str = "https://example.com/?utm_source=arre_mind_reader";
 
 // ── Shared tile components ──────────────────────────────────────────────────
 
@@ -60,12 +62,12 @@ impl HomepageTile {
         // These values match the current visual layout while keeping the tile group
         // centered automatically when the window is resized.
         commands.spawn((HomepageTile, AboutTile,
-            TilePosition(Vec2::new(-134.0, -94.0)),
-            TileSize(Vec2::new(360.0, 200.0)),
+            TilePosition(Vec2::new(0.0, -94.0)),
+            TileSize(Vec2::new(380.0, 380.0)),
             TileVisuals { title: "About", color: COLOR_ABOUT },
         ));
         commands.spawn((HomepageTile, FontSettingsTile,
-            TilePosition(Vec2::new(184.0, -94.0)),
+            TilePosition(Vec2::new(400.0, -94.0)),
             TileSize(Vec2::new(260.0, 320.0)),
             TileVisuals { title: "Default Tab Settings", color: COLOR_FONT },
         ));
@@ -108,16 +110,63 @@ impl AboutTile {
         let Ok(ctx) = contexts.ctx_mut() else { return };
         let (position, size, visuals) = tile.into_inner();
         tile_frame(ctx, "about", position, size, visuals, |ui| {
-            ui.heading("Arre Mind Reader");
+            ui.vertical_centered(|ui| {
+                ui.heading(
+                    egui::RichText::new("Arre Mind Reader")
+                        .size(26.0)
+                        .strong()
+                        .color(egui::Color32::from_rgb(238, 244, 255)),
+                );
+            });
             ui.add_space(8.0);
-            ui.label("A speed-reading app using RSVP (Rapid Serial Visual Presentation).");
-            ui.add_space(4.0);
-            ui.label("Words are displayed one at a time at your chosen speed, \
-                with a fixed eye fixation point for optimal reading flow.");
+            ui.label("Read faster with RSVP (Rapid Serial Visual Presentation).");
             ui.add_space(12.0);
-            ui.label(egui::RichText::new("Open a file or paste text using the '+ New' button above.")
-                .italics()
-                .color(egui::Color32::from_rgb(160, 170, 180)));
+
+            ui.strong("How it works?");
+            ui.add_space(4.0);
+            ui.label("Your eyes stay anchored to a fixed point while words flow");
+            ui.label("at your chosen speed, elevating your reading experience");
+            ui.label("until your inner voice quiets and you enter");
+            ui.label("the realm of frictionless comprehension.");
+            ui.add_space(2.0);
+            ui.horizontal(|ui| {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
+                    ui.label(
+                        egui::RichText::new("* Training required. Results may vary.")
+                            .small()
+                            .italics(),
+                    );
+                });
+            });
+            ui.add_space(6.0);
+
+            ui.strong("Our Motto");
+            ui.add_space(4.0);
+            ui.label("Read. Increase the WPM. Repeat.");
+            ui.add_space(10.0);
+
+            ui.strong("How do I start?");
+            ui.add_space(4.0);
+            ui.label("1. Click + New and open a text");
+            ui.label("2. Start around 250-350 WPM");
+            ui.label("3. Increase by +50 WPM when comprehension stays solid");
+            ui.add_space(10.0);
+            ui.label(
+                egui::RichText::new("\"Telepathy was hard, so I built RSVP. It's close enough.\" ~ Arrekin")
+                    .italics()
+                    .strong()
+                    .color(egui::Color32::from_rgb(223, 223, 105)),
+            );
+            ui.add_space(10.0);
+            ui.separator();
+            ui.add_space(6.0);
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.hyperlink_to("website soon", WEBSITE_PLACEHOLDER_URL);
+                ui.label(
+                    egui::RichText::new(format!("| v{}", env!("CARGO_PKG_VERSION")))
+                        .color(egui::Color32::from_rgb(170, 182, 198)),
+                );
+            });
         });
     }
 }
@@ -272,6 +321,7 @@ fn tile_frame(
                 .corner_radius(egui::CornerRadius::same(TILE_ROUNDING))
                 .inner_margin(egui::Margin::same(TILE_INNER_MARGIN))
                 .show(ui, |ui| {
+                    ui.visuals_mut().override_text_color = Some(COLOR_TILE_TEXT);
                     ui.set_min_size(egui::vec2(size.0.x, size.0.y));
                     ui.set_max_size(egui::vec2(size.0.x, size.0.y));
                     ui.heading(egui::RichText::new(visuals.title)
