@@ -1,0 +1,3 @@
+[build]
+# Hosted under https://<host>/arre-mind-reader/webapp/
+public_url = "/arre-mind-reader/webapp/"

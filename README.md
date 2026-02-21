@@ -53,6 +53,7 @@ There's a glint in the man's eye. "**It's a speed-reading app built with Rust + 
 - Per-tab settings: WPM, font, font size
 - Persistent session restore (tabs and defaults)
 - Native + WASM support
+- [Native Only] Custom fonts support(add them to `assets/fonts` and restart the app)
 
 The man loses his breath listing all the features and has to pause, but only for a moment before gathering strength for the last piece.
 

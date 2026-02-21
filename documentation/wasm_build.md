@@ -13,6 +13,12 @@ trunk serve --no-default-features
 
 Serves at `http://127.0.0.1:8080/` with hot-reload on file changes.
 
+For local testing with the configured subpath, use:
+
+```bash
+trunk serve --no-default-features --public-url /arre-mind-reader/webapp/
+```
+
 ## Release Build
 
 ```bash
@@ -24,6 +30,20 @@ Produces a `dist/` directory with all static files:
 - `.js` glue code (wasm-bindgen)
 - `.wasm` binary
 - `assets/` (fonts)
+
+`Trunk.toml` sets `public_url = "/arre-mind-reader/webapp/"`, so generated asset URLs are absolute from that subpath.
+
+## Deployment Artifacts (copy all)
+
+Copy the full contents of `dist/` into your server path for `/arre-mind-reader/webapp/`.
+
+Minimum expected files after build:
+- `dist/index.html`
+- `dist/arre_mind_reader-*.js`
+- `dist/arre_mind_reader-*_bg.wasm`
+- `dist/assets/**` (all font files)
+
+Do not omit `assets/`, otherwise runtime font loading fails.
 
 ## Hosting
 

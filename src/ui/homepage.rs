@@ -20,7 +20,7 @@ const COLOR_SHORTCUTS: egui::Color32 = egui::Color32::from_rgb(78, 56, 72);
 const COLOR_STATS: egui::Color32 = egui::Color32::from_rgb(56, 68, 82);
 const COLOR_TIPS: egui::Color32 = egui::Color32::from_rgb(72, 62, 48);
 const COLOR_TILE_TEXT: egui::Color32 = egui::Color32::from_rgb(187, 197, 214);
-const WEBSITE_PLACEHOLDER_URL: &str = "https://example.com/?utm_source=arre_mind_reader";
+const WEBSITE_PLACEHOLDER_URL: &str = "https://arrekin.com/?utm_source=arre-mind-reader";
 
 // ── Shared tile components ──────────────────────────────────────────────────
 
@@ -52,7 +52,7 @@ pub struct HomepageTile;
 impl HomepageTile {
     /// Run condition: returns true when the homepage tab is active.
     pub fn is_active(
-        query: Option<Single<Entity, (With<HomepageTab>, With<ActiveTab>)>>,
+        query: Option<Single<(), (With<HomepageTab>, With<ActiveTab>)>>,
     ) -> bool {
         query.is_some()
     }
@@ -167,7 +167,7 @@ impl AboutTile {
             ui.separator();
             ui.add_space(6.0);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.hyperlink_to("website soon", WEBSITE_PLACEHOLDER_URL);
+                ui.hyperlink_to("Arrekin.com", WEBSITE_PLACEHOLDER_URL);
                 ui.label(
                     egui::RichText::new(format!("| v{}", env!("CARGO_PKG_VERSION")))
                         .color(egui::Color32::from_rgb(170, 182, 198)),
