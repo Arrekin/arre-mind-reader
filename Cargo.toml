@@ -5,10 +5,23 @@ edition = "2024"
 
 [features]
 default = ["native"]
-native = ["bevy/dynamic_linking"]
+native = ["bevy/dynamic_linking", "bevy/default_platform"]
 
 [dependencies]
-bevy = { version = "0.18.*", default-features = false, features = ["2d"] }
+bevy = { version = "0.18.*", default-features = false, features = [
+    #"2d_bevy_render",  
+    "bevy_render",         # The base renderer
+    "bevy_core_pipeline",  # Camera and basic render passes
+    "bevy_sprite_render",  # Handles Sprite and Text2d rendering
+    "bevy_text",           # Required for Text2d specifically
+    
+    "bevy_ui",          
+    "bevy_asset",
+    "bevy_log",
+    "bevy_state",       
+    "bevy_winit",       
+    "webgl2",           # Required for Wasm rendering
+] }
 bevy_egui = "0.39.*"
 serde = { version = "1.0.*", features = ["derive"] }
 ron = "0.12.*"              # Rust Object Notation — tab state persistence format

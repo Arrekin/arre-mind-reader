@@ -2,6 +2,8 @@
 
 Version: **1.0.0**
 
+**Website: [Arre Mind Reader](https://arrekin.com/arre-mind-reader/?source=arre-mind-reader-repo)**
+
 ![screenshot](media/arre-mind-reader.png)
 
 ## Prologue
