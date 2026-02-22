@@ -23,6 +23,8 @@ fn main() {
                 primary_window: Some(Window {
                     title: "Arre Mind Reader".into(),
                     resolution: (1280, 720).into(),
+                    // Without this the clipboard(pasting) doesn't work :<
+                    prevent_default_event_handling: false,
                     ..default()
                 }),
                 ..default()
