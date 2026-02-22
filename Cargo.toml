@@ -33,3 +33,11 @@ opt-level = 3
 [profile.release]
 lto = true
 codegen-units = 1
+
+# called from index.html
+[profile.wasm-release]
+inherits = "release"
+opt-level = "z"
+panic = "abort"
+lto = "fat" # "fat" LTO is even more aggressive than "true"
+strip = "symbols"
