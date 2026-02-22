@@ -66,8 +66,9 @@ Ensure `.wasm` files are served with MIME type `application/wasm`. Enable gzip/b
 - **`persistence.rs`** — Native uses `dirs` + `std::fs`, WASM uses `gloo_storage::LocalStorage`
 - **`main.rs`** — `AssetMetaCheck::Never` required to prevent Bevy from fetching nonexistent `.meta` files over HTTP
 
-### Known WASM Limitations
+### Optimization Notes
 
-- **File dialog extra confirm:** `rfd` on WASM shows a browser `confirm()` dialog before the file picker. This is because Bevy processes input on the next animation frame, by which point the browser's transient user activation has expired. The confirm dialog re-establishes a user gesture. This is expected behavior.
-- **File dialog cancel:** The `rfd` WASM future may not resolve when the user cancels the file picker. The Cancel button in the New Tab dialog drops the pending task to recover.
-- **First build is slow:** Compiling the full Bevy dependency tree for `wasm32` takes ~10 minutes. Incremental rebuilds are fast (~10s).
+- Use `wasm_opt` in versions 126 or higher
+- `wasm_opt` run is enabled by the index.html code: `<link data-trunk rel="rust" href="Cargo.toml" data-wasm-opt="z" data-wasm-opt-params="--enable-reference-types --enable-bulk-memory" />`
+- Use `-v` flag for trunk build to see details and whether `wasm_opt` is being used
+
